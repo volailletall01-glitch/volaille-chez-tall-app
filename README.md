@@ -1,96 +1,92 @@
 # Volaille chez TALL — Gestion avicole
 
-Application web progressive pour l’élevage et la commercialisation de poulets de chair. Elle est utilisable sur ordinateur, tablette et téléphone ; les relevés restent enregistrés localement lorsque le réseau est indisponible.
+Application web progressive (PWA) pour l’élevage et la commercialisation de poulets de chair. Elle fonctionne sur ordinateur, tablette et téléphone, sans compte ni serveur : toutes les données sont enregistrées dans le navigateur (IndexedDB) et restent disponibles hors ligne.
 
-## Démarrer
+## Application en ligne
 
-Cette version ne nécessite ni Node.js, ni compilation, ni dépendance tierce. Servez le dossier avec un serveur HTTP local (les PWA ne s’installent pas depuis `file://`) :
+https://volaille-chez-tall.vercel.app
+
+Le code est hébergé sur GitHub : https://github.com/volailletall01-glitch/volaille-chez-tall-app
+
+## Démarrer en local
+
+Aucune compilation, aucun Node.js, aucune dépendance tierce. Servez simplement le dossier avec un serveur HTTP local (une PWA ne s’installe pas depuis `file://`) :
 
 ```powershell
 cd C:\Users\LENOVO\Desktop\POULET
 py -m http.server 8080
 ```
 
-Ouvrez ensuite `http://localhost:8080`. Le service worker met en cache l’interface après le premier chargement. Les relevés et les files de synchronisation sont conservés dans IndexedDB sur l’appareil.
+Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en cache après le premier chargement.
 
-## Application en ligne
+## Fonctions
 
-L’application est publiée avec GitHub Pages à l’adresse :
-https://volailletall01-glitch.github.io/volaille-chez-tall/
+### Vue d’ensemble
+- Indicateurs généraux : bandes en cours, sujets vivants, mortalité cumulée, chiffre d’affaires, dépenses totales.
+- Tableau **Par bande** : sujets en élevage, mortalité cumulée, revenus, charges de la bande, bénéfice après vente.
 
-Chaque push sur `main` déclenche le déploiement via [deploy-pages.yml](./.github/workflows/deploy-pages.yml). Le premier déploiement peut prendre quelques minutes.
+### Bandes
+- Création et modification : nom, souche, date de mise en place, nombre de poussins, fournisseur, poids et cycle cibles, prix unitaire du poussin, transport initial (coût initial calculé automatiquement).
+- Suppression d’une bande, ou suppression de son historique de relevés.
+- Clic sur une ligne : fiche complète de la bande (effectif, mortalité, coûts, ventes, bénéfice).
 
-## Fonctions disponibles
+### Suivi quotidien
+Un relevé par bande et par date, limité à l’essentiel :
+- bande ;
+- date du relevé ;
+- mortalité du jour ;
+- tri / réformes ;
+- note ou observation.
 
-- Création de bandes de poulets de chair, souche, effectif, fournisseur, coût unitaire des poussins et transport initial ; le coût initial est calculé automatiquement.
-- Relevés journaliers de mortalité, tri, aliments par phase, eau, poids, traitements et frais de soins.
-- Inventaire par intrant, seuils d’alerte, entrées de stock et coût moyen pondéré ; l’aliment consommé déduit le stock et alimente le coût de la bande.
-- Ventes de sujets vivants par lot, calcul du poids et du montant, suivi du règlement et des crédits.
-- Clients, charges affectées à un lot ou communes, tableaux de bord et estimation de rentabilité par bande.
-- File locale hors ligne avec synchronisation Supabase explicite, idempotente et reprise après erreur.
-- Navigation entre les sections accessible au clavier, conservée dans l’URL et restaurée avec les boutons précédent/suivant du navigateur ; accès aux paramètres également disponible sur mobile.
+### Ventes
+- Vente par bande avec nom, téléphone et adresse du client.
+- Calcul du montant à partir du nombre de sujets, du poids moyen et du prix au kg.
+- Suivi du règlement : montant payé et reliquat.
+- **Reçu PDF téléchargeable** (avec le logo) après chaque vente : montant global si la vente est soldée, sinon montant payé + reliquat.
+- **Crédits clients** : liste des clients avec le montant restant dû, possibilité d’enregistrer le paiement du solde et de télécharger le reçu correspondant.
 
-Les catégories et montants sont présentés en FCFA ; adaptez le format dans `app.js` si votre exploitation utilise une autre devise.
+### Charges
+- Dépense libre ou affectée à une bande.
+- Une charge affectée à une bande entre dans le coût et le bénéfice de cette bande.
+
+### Statistiques annuelles
+- Synthèse par année : bandes, ventes, revenus, charges, bénéfice, mortalité.
+
+Tous les montants sont affichés en FCFA.
 
 ## Structure
 
 ```text
 POULET/
-├── index.html                 # Shell de la PWA
-├── app.js                     # Interface, IndexedDB, règles de calcul et sync Supabase
-├── styles.css                 # Interface tactile responsive
+├── index.html                 # Shell de la PWA et navigation
+├── app.js                     # Interface, IndexedDB, calculs, reçus PDF
+├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
-├── sw.js                      # Cache de l’application hors ligne
-├── icons/volaille-chez-tall-logo.png # Logo utilisé dans l’interface
-├── icons/volaille-chez-tall-192.png # Icône PWA Android
-├── icons/volaille-chez-tall-512.png # Icône PWA haute résolution
-└── supabase/schema.sql        # Schéma PostgreSQL, fonctions et politiques RLS
+├── sw.js                      # Cache hors ligne (APP_SHELL)
+├── icons/                     # Logo et icônes PWA
+└── .github/workflows/         # Déploiement GitHub Pages
 ```
 
-### Modèle métier et indicateurs
+## Données et sauvegarde
 
-| Table PostgreSQL | Données principales |
-|---|---|
-| `batches` (bandes) | Arrivée, souche, effectif, fournisseur, coût unitaire et total des poussins, transport, poids/âge cibles et statut |
-| `daily_logs` | Relevé unique par bande et par jour : mortalité, tri, aliments par phase, eau, poids, traitement et frais |
-| `inventory_items`, `inventory_movements` | Intrants, quantité disponible, seuil, coût moyen pondéré, achats/transport et consommations |
-| `poultry_sales` | Lot source, client, sujets, poids, prix, montant, règlement initial et solde |
-| `charges` | Dépenses affectées à un lot ou communes à l’exploitation |
-| `clients` | Coordonnées, canal de vente et notes |
-
-Calculs affichés : mortalité cumulée = sujets morts / effectif initial ; IC = kg d’aliment distribués / biomasse vive mesurée (sujets encore présents pesés + poids vendu) ; coût du lot = poussins + transport + aliment consommé + soins et autres coûts de relevés + charges directes ; coût unitaire = coût du lot / sujets vivants ou vendus. La date de vente cible est estimée à partir de la date d’arrivée et de l’âge cible (42 jours par défaut). Le taux de mortalité ne comprend pas les tris/réformes. L’IC reste indisponible tant qu’une pesée réelle n’est pas saisie.
-
-Les politiques RLS filtrent chaque table par adhésion à l’organisation. Les clés étrangères composées empêchent de lier une vente, un relevé ou un mouvement de stock à une ressource d’une autre exploitation.
-
-## Navigation et interactions
-
-Chaque section est un onglet accessible : utilisez les flèches gauche/droite ou haut/bas, ainsi que Début/Fin, puis Entrée ou Espace. Le changement de section actualise l’URL (`#bands`, `#stock`, etc.) ; les boutons précédent/suivant du navigateur restaurent aussi l’onglet. Sur téléphone, faites défiler la barre d’onglets en bas ; les paramètres sont accessibles par le bouton en haut de l’écran.
-
-Les interactions suivent les principes du dépôt [wshobson/agents](https://github.com/wshobson/agents), notamment ses recommandations JavaScript moderne et d’accessibilité : [modern-javascript-patterns](https://github.com/wshobson/agents/tree/main/plugins/javascript-typescript/skills/modern-javascript-patterns) et [accessibility-compliance](https://github.com/wshobson/agents/tree/main/plugins/accessibility-compliance).
-
-## Activer Supabase
-
-1. Le projet **Volaillecheztall** (`avoktrlsmbnisxxvxogc`) est préconfiguré dans l’application. Ouvrez son [tableau de bord Supabase](https://supabase.com/dashboard/project/avoktrlsmbnisxxvxogc) et exécutez [`supabase/schema.sql`](./supabase/schema.sql) dans son SQL Editor.
-2. Créez un utilisateur dans **Authentication → Users** (ou activez l’inscription contrôlée selon votre politique d’accès).
-3. Dans l’application, ouvrez **Paramètres & synchronisation**, vérifiez l’URL préremplie, puis fournissez la clé publique `anon`/`publishable`, l’e-mail et le mot de passe de l’utilisateur.
-4. La première connexion crée l’exploitation et son adhésion ; les enregistrements locaux sont associés à cette exploitation, envoyés dans l’ordre et les données du serveur sont ensuite récupérées.
-
-N’insérez jamais une clé `service_role` dans l’application web. La clé publique et le jeton utilisateur ne remplacent pas les politiques RLS. Le mot de passe n’est pas stocké ; le jeton est gardé dans `sessionStorage` pour l’onglet courant.
-
-Les synchronisations sont déclenchées par le bouton **Synchroniser** ou après une connexion depuis les paramètres. En cas d’échec, les opérations non confirmées restent en attente sur l’appareil. Les identifiants UUID rendent les nouvelles tentatives sûres ; la synchronisation est paginée. Utilisez un navigateur/profil par exploitation : l’app refuse de rattacher les données locales à une autre organisation.
+- Les données sont stockées localement dans IndexedDB, par navigateur et par adresse (origine). Elles ne sont pas partagées entre appareils.
+- Vider les données du site ou changer d’adresse (par exemple passer de GitHub Pages à Vercel) revient à repartir d’une base vide.
+- Aucun envoi vers un service externe : pas de Supabase, pas de synchronisation cloud.
 
 ## Installer
 
-- **Windows / Android :** ouvrez l’application depuis un hébergement HTTPS (ou `localhost`) puis utilisez l’invite d’installation du navigateur.
-- **iPhone / iPad :** ouvrez l’URL dans Safari, touchez **Partager → Sur l’écran d’accueil**. Le mode hors ligne est disponible après le premier chargement. Pour une icône iOS optimale, ajoutez un PNG `apple-touch-icon` dédié lors de la mise en production.
+- **Windows / Android :** ouvrez l’application depuis une adresse HTTPS (ou `localhost`) puis utilisez l’invite d’installation du navigateur.
+- **iPhone / iPad :** ouvrez l’URL dans Safari, touchez **Partager → Sur l’écran d’accueil**.
 
-Le serveur doit être servi en HTTPS en production. La première ouverture nécessite une connexion pour mettre en cache le shell ; les données métier saisies sont ensuite utilisables hors ligne. Les polices distantes ne sont qu’un enrichissement visuel : l’application reste lisible sans elles.
+## Développement
 
-## Hypothèses et limites du MVP
+Après chaque modification de `app.js`, `styles.css`, `index.html` ou des icônes :
 
-- Une saisie quotidienne par bande et par date ; les stocks d’aliments consommés doivent être saisis en kg pour garantir une déduction et un coût précis.
-- Les ventes enregistrées portent sur des poulets vivants ; aucun abattoir, lot transformé, SMS/WhatsApp ou passerelle Mobile Money n’est connecté à ce MVP.
-- Les règlements partiels sont suivis au niveau de la vente ; l’historique de versements successifs, les commandes planifiées et les courbes de croissance par souche restent à ajouter.
-- En cas de saisies hors ligne concurrentes sur plusieurs appareils pour le même lot ou stock, la résolution des conflits doit être faite manuellement ; ce MVP ne fournit pas de verrouillage transactionnel multi-appareils.
-- Les données locales ne sont pas un remplacement de sauvegarde : synchronisez régulièrement et prévoyez une politique de sauvegarde Supabase.
-- Les calculs de marge sont des estimations de gestion. Ils reposent sur les quantités et coûts saisis, sans répartition automatique des charges communes entre lots.
+1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v30`) pour forcer la mise à jour du cache.
+2. Rechargez l’application en désinscrivant le service worker ou en vidant le cache du site.
+
+## Limites connues
+
+- Une saisie quotidienne par bande et par date.
+- Les ventes portent sur des poulets vivants ; aucun abattoir, lot transformé, SMS/WhatsApp ou Mobile Money n’est connecté.
+- Les données locales ne remplacent pas une sauvegarde : exportez ou conservez un profil de navigateur dédié.

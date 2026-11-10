@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poulet-pro-shell-v29';
+const CACHE_NAME = 'poulet-pro-shell-v30';
 const APP_SHELL = [
   './',
   './index.html',
