@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f7f2" />
+    <meta name="description" content="Commandez vos poulets de chair chez Volaille chez TALL. Stock et prix en temps réel." />
+    <link rel="icon" href="./icons/volaille-chez-tall-logo.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/volaille-chez-tall-180.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Commander — Volaille chez TALL</title>
+  </head>
+  <body class="order-body">
+    <header class="order-topbar">
+      <a class="brand order-brand" href="./commander.html" aria-label="Volaille chez TALL, commander">
+        <img class="brand-mark" src="./icons/volaille-chez-tall-logo.png" alt="" />
+        <span class="brand-copy"><strong>Volaille chez TALL</strong><small>Poulets de chair</small></span>
+      </a>
+      <a class="order-back" href="./index.html">Espace gérant</a>
+    </header>
+
+    <main class="order-main">
+      <section class="order-hero">
+        <p class="order-eyebrow">Commande en ligne</p>
+        <h1>Réservez vos poulets frais</h1>
+        <p class="order-intro">Remplissez le formulaire, nous vous rappelons rapidement pour confirmer la livraison dans votre quartier.</p>
+      </section>
+
+      <section class="order-grid">
+        <article class="order-stock" aria-live="polite" id="stock-card">
+          <div class="order-stock-head">
+            <span class="order-stock-label">Stock disponible</span>
+            <span class="status-pill neutral" id="stock-state">Chargement…</span>
+          </div>
+          <strong class="order-stock-value" id="stock-value">—</strong>
+          <p class="order-stock-note" id="stock-note">Vérification du stock en cours…</p>
+          <p class="order-price-range" id="price-range">Prix par tête : entre 2 500 F et 4 500 F</p>
+          <p class="order-updated" id="stock-updated"></p>
+        </article>
+
+        <article class="order-card" id="form-card">
+          <h2>Votre commande</h2>
+          <p class="order-card-intro">Tous les champs sont obligatoires. Le prix proposé doit rester dans la fourchette affichée.</p>
+          <form id="order-form" novalidate>
+            <div class="order-fields">
+              <div class="field">
+                <label for="order-name">Nom et prénom *</label>
+                <input id="order-name" name="client_name" autocomplete="name" maxlength="120" required placeholder="Ex. Awa Diop" />
+              </div>
+              <div class="field">
+                <label for="order-phone">Téléphone *</label>
+                <input id="order-phone" name="client_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="Ex. 77 123 45 67" />
+              </div>
+              <div class="field full">
+                <label for="order-neighborhood">Quartier de livraison *</label>
+                <input id="order-neighborhood" name="neighborhood" maxlength="120" required placeholder="Ex. Médina, Dakar" />
+              </div>
+              <div class="field">
+                <label for="order-quantity">Quantité souhaitée *</label>
+                <input id="order-quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" required placeholder="Nombre de poulets" />
+              </div>
+              <div class="field">
+                <label for="order-price">Prix par tête proposé (FCFA) *</label>
+                <input id="order-price" name="price_per_head" type="number" inputmode="numeric" min="2500" max="4500" step="50" required placeholder="Entre 2 500 et 4 500" />
+              </div>
+              <div class="cost-preview full">
+                <span>Montant estimé de votre commande</span>
+                <strong id="order-total">0 FCFA</strong>
+              </div>
+            </div>
+            <p class="order-hint" id="form-hint" role="status" aria-live="polite"></p>
+            <div class="order-actions">
+              <button class="primary-button order-submit" type="submit" id="order-submit">Envoyer ma commande</button>
+            </div>
+          </form>
+        </article>
+
+        <article class="order-card order-thanks" id="thanks-card" hidden>
+          <div class="order-thanks-icon" aria-hidden="true">✓</div>
+          <h2 id="thanks-title">Merci infiniment !</h2>
+          <p id="thanks-message">Votre commande a bien été reçue. Nous vous contactons très vite pour confirmer la livraison.</p>
+          <p class="order-thanks-recap" id="thanks-recap"></p>
+          <button class="secondary-button" type="button" id="thanks-again">Passer une autre commande</button>
+        </article>
+
+        <article class="order-card order-soldout" id="soldout-card" hidden>
+          <div class="order-soldout-icon" aria-hidden="true">!</div>
+          <h2>Stock épuisé</h2>
+          <p id="soldout-message">Désolé, le stock est actuellement épuisé.</p>
+          <p class="order-card-intro">Revenez un peu plus tard : de nouveaux poulets arrivent régulièrement. Vous pouvez aussi nous appeler directement.</p>
+        </article>
+
+        <article class="order-card order-unavailable" id="unavailable-card" hidden>
+          <h2>Commandes bientôt disponibles</h2>
+          <p>Le service de commande en ligne n’est pas encore activé. Merci de nous contacter directement.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer class="order-footer">
+      <span>Volaille chez TALL — poulets de chair</span>
+      <span>Paiement à la livraison</span>
+    </footer>
+
+    <script src="./supabase-config.js"></script>
+    <script src="./commander.js"></script>
+  </body>
+</html>

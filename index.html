@@ -28,6 +28,7 @@
           <button class="nav-item" id="tab-daily" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="daily"><span class="nav-icon" data-icon="daily"></span><span>Suivi quotidien</span></button>
 
           <button class="nav-item" id="tab-sales" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="sales"><span class="nav-icon" data-icon="sales"></span><span>Ventes</span></button>
+          <button class="nav-item" id="tab-orders" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="orders"><span class="nav-icon" data-icon="orders"></span><span>Mes Commandes</span><span class="nav-count" id="order-count" hidden></span></button>
           <button class="nav-item" id="tab-expenses" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="expenses"><span class="nav-icon" data-icon="expenses"></span><span>Charges</span></button>
           <button class="nav-item" id="tab-annual" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="annual"><span class="nav-icon" data-icon="stats"></span><span>Statistiques annuelles</span></button>
         </nav>
@@ -54,6 +55,7 @@
       <div id="dialog-content"></div>
     </dialog>
     <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+    <script src="./supabase-config.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

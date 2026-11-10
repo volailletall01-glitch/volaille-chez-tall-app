@@ -53,6 +53,13 @@ Un relevé par bande et par date, limité à l’essentiel :
 - **Reçu PDF téléchargeable** (avec le logo) après chaque vente : montant global si la vente est soldée, sinon montant payé + reliquat.
 - **Crédits clients** : liste des clients avec le montant restant dû, possibilité d’enregistrer le paiement du solde et de télécharger le reçu correspondant.
 
+### Mes Commandes
+- **Lien public de commande** (`commander.html`) à partager aux clients : stock de poulets disponibles et fourchette de prix (2 500 – 4 500 FCFA) affichés en temps réel.
+- Si le stock est épuisé, le formulaire est remplacé par le message « Désolé, le stock est actuellement épuisé. »
+- Le client saisit nom et prénom, téléphone, quartier, quantité et prix par tête proposé. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
+- Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (statut Validée, quantité déduite du stock de l’élevage et stock public réactualisé) et bouton **Refuser** (statut Refusée, sans impact sur le stock) qui prépare un message d’excuse à envoyer sur WhatsApp.
+- Les commandes sont stockées dans Supabase ; la connexion gérant se fait dans l’onglet avec le compte créé dans **Authentication → Users**.
+
 ### Charges
 - Dépense libre ou affectée à une bande.
 - Une charge affectée à une bande entre dans le coût et le bénéfice de cette bande.
@@ -67,6 +74,10 @@ Tous les montants sont affichés en FCFA.
 ```text
 POULET/
 ├── index.html                 # Shell de la PWA et navigation
+├── commander.html             # Page publique de commande client
+├── commander.js               # Stock temps réel, formulaire, envoi
+├── supabase-config.js         # URL + clé publique Supabase
+├── supabase/commandes.sql     # Tables, sécurité (RLS) et droits
 ├── app.js                     # Interface, IndexedDB, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
@@ -77,9 +88,16 @@ POULET/
 
 ## Données et sauvegarde
 
-- Les données sont stockées localement dans IndexedDB, par navigateur et par adresse (origine). Elles ne sont pas partagées entre appareils.
-- Vider les données du site ou changer d’adresse (par exemple passer de GitHub Pages à Vercel) revient à repartir d’une base vide.
-- Aucun envoi vers un service externe : pas de Supabase, pas de synchronisation cloud.
+- Bandes, relevés, ventes, charges et clients sont stockés localement dans IndexedDB, par navigateur et par adresse (origine). Ils ne sont pas partagés entre appareils.
+- Vider les données du site ou changer d’adresse (par exemple passer de GitHub Pages à Vercel) revient à repartir d’une base vide pour ces données locales.
+- **Commandes clients** : seules les commandes et le stock publié passent par Supabase, afin que le lien public fonctionne depuis n’importe quel appareil. La clé utilisée dans `supabase-config.js` est publique et limitée par les règles de sécurité (RLS) : elle ne peut que créer une commande et lire le stock publié.
+
+## Mise en place de Supabase (une seule fois)
+
+1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor**.
+2. Créer le compte gérant dans **Authentication → Users → Add user**.
+3. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+4. Dans l’application, ouvrir **Mes Commandes → Se connecter**, puis **Publier le stock** pour rendre le stock visible sur la page publique.
 
 ## Installer
 

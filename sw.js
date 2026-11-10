@@ -1,9 +1,12 @@
-const CACHE_NAME = 'poulet-pro-shell-v30';
+const CACHE_NAME = 'poulet-pro-shell-v32';
 const APP_SHELL = [
   './',
   './index.html',
+  './commander.html',
   './styles.css',
   './app.js',
+  './commander.js',
+  './supabase-config.js',
   './manifest.webmanifest',
   './icons/volaille-chez-tall-logo.png',
   './icons/volaille-chez-tall-180.png',
@@ -36,7 +39,9 @@ self.addEventListener('fetch', (event) => {
     }).catch(async () => {
       const cached = await caches.match(request);
       if (cached) return cached;
-      if (request.mode === 'navigate') return caches.match('./index.html');
+      if (request.mode === 'navigate') {
+        return caches.match(request.url.includes('commander') ? './commander.html' : './index.html');
+      }
       throw new Error('Ressource indisponible hors ligne.');
     }),
   );
