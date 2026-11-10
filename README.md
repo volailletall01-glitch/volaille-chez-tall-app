@@ -13,6 +13,13 @@ py -m http.server 8080
 
 Ouvrez ensuite `http://localhost:8080`. Le service worker met en cache l’interface après le premier chargement. Les relevés et les files de synchronisation sont conservés dans IndexedDB sur l’appareil.
 
+## Application en ligne
+
+L’application est publiée avec GitHub Pages à l’adresse :
+https://volailletall01-glitch.github.io/volaille-chez-tall/
+
+Chaque push sur `main` déclenche le déploiement via [deploy-pages.yml](./.github/workflows/deploy-pages.yml). Le premier déploiement peut prendre quelques minutes.
+
 ## Fonctions disponibles
 
 - Création de bandes de poulets de chair, souche, effectif, fournisseur, coût unitaire des poussins et transport initial ; le coût initial est calculé automatiquement.
