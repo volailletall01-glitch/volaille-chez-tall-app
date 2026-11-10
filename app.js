@@ -1,7 +1,6 @@
 const DB_NAME = 'poulet-pro';
 const DB_VERSION = 1;
-const DEFAULT_SUPABASE_URL = 'https://avoktrlsmbnisxxvxogc.supabase.co';
-const STORE_NAMES = ['bands', 'daily_logs', 'inventory_items', 'inventory_movements', 'sales', 'charges', 'clients', 'outbox', 'meta'];
+const STORE_NAMES = ['bands', 'daily_logs', 'inventory_items', 'inventory_movements', 'sales', 'charges', 'clients', 'meta'];
 const ICONS = {
   dashboard: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
   bands: '<path d="M4 20V8l8-5 8 5v12"/><path d="M9 20v-6h6v6M3 20h18"/>',
@@ -28,14 +27,9 @@ const CATEGORY_LABELS = {
 };
 const CHANNEL_LABELS = { wholesale: 'Grossiste / revendeur', restaurant: 'Restaurant', supermarket: 'Supermarché', retail: 'Détail / comptoir', other: 'Autre' };
 const PAYMENT_LABELS = { cash: 'Espèces', mobile_money: 'Mobile Money', transfer: 'Virement', credit: 'Crédit client' };
-const CLOUD_TABLES = {
-  bands: 'batches', daily_logs: 'daily_logs', inventory_items: 'inventory_items',
-  inventory_movements: 'inventory_movements', sales: 'poultry_sales', charges: 'charges', clients: 'clients',
-};
 let db;
 let logoJpeg = null;
 let currentPage = 'dashboard';
-let syncInProgress = false;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -51,37 +45,6 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':
 const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
 const daysSince = (date) => Math.max(0, Math.floor((new Date(`${today()}T12:00:00`) - new Date(`${date}T12:00:00`)) / 86400000));
 const sum = (items, getter) => items.reduce((total, item) => total + (Number(getter(item)) || 0), 0);
-
-async function preloadLogo() {
-  try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-      img.src = './icons/volaille-chez-tall-logo.png';
-    });
-    const scale = Math.min(1, 90 / (img.width || 90));
-    const w = Math.max(1, Math.round((img.width || 90) * scale));
-    const h = Math.max(1, Math.round((img.height || 90) * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-    const base64 = dataUrl.split(',')[1] || '';
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    logoJpeg = { data: bytes, width: w, height: h };
-  } catch (error) {
-    console.error('Logo non charge', error);
-    logoJpeg = null;
-  }
-}
 
 async function preloadLogo() {
   try {
@@ -153,22 +116,37 @@ function writeMeta(key, value) {
   });
 }
 
+async function deleteRecord(storeName, id) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).delete(id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
+  });
+}
+
+async function deleteLogsForBand(bandId) {
+  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
+  if (!logs.length) return;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('daily_logs', 'readwrite');
+    const store = transaction.objectStore('daily_logs');
+    for (const log of logs) store.delete(log.id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
+  });
+}
+
 async function saveRecords(entries) {
   const timestamp = new Date().toISOString();
-  const prepared = entries.map(({ store, record, enqueue = true }) => ({
-    store, enqueue: enqueue && Boolean(CLOUD_TABLES[store]),
-    record: { ...record, updated_at: timestamp },
+  const prepared = entries.map(({ store, record }) => ({
+    store, record: { ...record, updated_at: timestamp },
   }));
-  const names = [...new Set([...prepared.map((entry) => entry.store), ...(prepared.some((entry) => entry.enqueue) ? ['outbox'] : [])])];
+  const names = [...new Set(prepared.map((entry) => entry.store))];
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(names, 'readwrite');
     for (const entry of prepared) {
       transaction.objectStore(entry.store).put(entry.record);
-      if (entry.enqueue) {
-        transaction.objectStore('outbox').put({
-          id: uid(), entity: entry.store, record: entry.record, created_at: timestamp,
-        });
-      }
     }
     transaction.oncomplete = () => resolve(prepared.map((entry) => entry.record));
     transaction.onerror = () => reject(transaction.error || new Error('Enregistrement local impossible.'));
@@ -176,70 +154,17 @@ async function saveRecords(entries) {
   });
 }
 
-async function saveRecord(storeName, record, enqueue = true) {
-  const [saved] = await saveRecords([{ store: storeName, record, enqueue }]);
+async function saveRecord(storeName, record) {
+  const [saved] = await saveRecords([{ store: storeName, record }]);
   return saved;
 }
 
-async function removeOutbox(id) {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('outbox', 'readwrite');
-    transaction.objectStore('outbox').delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Impossible de confirmer la synchronisation.'));
-  });
-}
-
-
-async function deleteRecord(storeName, id) {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readwrite');
-    transaction.objectStore(storeName).delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
-  });
-}
-
-async function deleteLogsForBand(bandId) {
-  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
-  if (!logs.length) return;
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('daily_logs', 'readwrite');
-    const store = transaction.objectStore('daily_logs');
-    for (const log of logs) store.delete(log.id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
-  });
-}
-
-
-async function deleteRecord(storeName, id) {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readwrite');
-    transaction.objectStore(storeName).delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
-  });
-}
-
-async function deleteLogsForBand(bandId) {
-  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
-  if (!logs.length) return;
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('daily_logs', 'readwrite');
-    const store = transaction.objectStore('daily_logs');
-    for (const log of logs) store.delete(log.id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
-  });
-}
-
 async function getSnapshot() {
-  const [bands, logs, items, movements, sales, charges, clients, outbox] = await Promise.all([
+  const [bands, logs, items, movements, sales, charges, clients] = await Promise.all([
     readAll('bands'), readAll('daily_logs'), readAll('inventory_items'), readAll('inventory_movements'),
-    readAll('sales'), readAll('charges'), readAll('clients'), readAll('outbox'),
+    readAll('sales'), readAll('charges'), readAll('clients'),
   ]);
-  return { bands, logs, items, movements, sales, charges, clients, outbox };
+  return { bands, logs, items, movements, sales, charges, clients };
 }
 
 function toast(message, error = false) {
@@ -364,22 +289,6 @@ function renderDaily(snapshot) {
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
 }
 
-function renderStock(snapshot) {
-  const rows = [...snapshot.items].sort((a, b) => a.name.localeCompare(b.name)).map((item) => {
-    const low = Number(item.quantity) <= Number(item.min_quantity);
-    return `<tr><td class="primary-cell">${esc(item.name)}<span class="secondary-cell">${esc(CATEGORY_LABELS[item.category] || item.category)}</span></td><td>${number(item.quantity, 1)} ${esc(item.unit)}</td><td>${number(item.min_quantity, 1)} ${esc(item.unit)}</td><td>${currency(item.average_unit_cost)}/${esc(item.unit)}</td><td><span class="status-pill ${low ? 'warning' : 'neutral'}">${low ? 'À réapprovisionner' : 'Disponible'}</span></td></tr>`;
-  }).join('');
-  const value = sum(snapshot.items, (item) => Number(item.quantity) * Number(item.average_unit_cost));
-  return `<div class="page-heading"><div><h1>Stocks & intrants</h1><p>Aliments, santé animale, litière et combustible de chauffage.</p></div><button class="primary-button" data-action="new-stock"><span class="plus">+</span> Entrée de stock</button></div>
-    <section class="metrics-grid">
-      ${metricCard('Références suivies', number(snapshot.items.length), 'Produits enregistrés', 'box')}
-      ${metricCard('Valeur estimée', currency(value), 'Calculée au coût moyen pondéré', 'money')}
-      ${metricCard('Alertes de stock', number(snapshot.items.filter((item) => Number(item.quantity) <= Number(item.min_quantity)).length), 'À réapprovisionner', 'stock')}
-      ${metricCard('Mouvements', number(snapshot.movements.length), 'Entrées et consommations', 'daily')}
-    </section>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Inventaire actuel</h2><p>Les quantités sont mises à jour à chaque saisie de consommation.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Produit</th><th>Quantité</th><th>Seuil d’alerte</th><th>Coût moyen unitaire</th><th>État</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Inventaire vide', 'Enregistrez vos premières livraisons d’aliments ou d’intrants.', '<button class="primary-button" data-action="new-stock">Ajouter un produit</button>')}</section>`;
-}
 
 function renderSales(snapshot) {
   const rows = [...snapshot.sales].sort((a, b) => b.sale_date.localeCompare(a.sale_date)).map((sale) => {
@@ -407,16 +316,6 @@ function renderExpenses(snapshot) {
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Affectation</th><th>Montant</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-d’œuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
 }
 
-function renderClients(snapshot) {
-  const rows = [...snapshot.clients].sort((a, b) => a.name.localeCompare(b.name)).map((client) => {
-    const sales = snapshot.sales.filter((sale) => sale.client_id === client.id);
-    const outstanding = sum(sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
-    return `<tr><td class="primary-cell">${esc(client.name)}</td><td>${esc(client.phone || '—')}</td><td>${esc(client.email || '—')}</td><td>${number(sales.length)}</td><td>${currency(outstanding)}</td><td>${esc(CHANNEL_LABELS[client.channel] || client.channel || '—')}</td></tr>`;
-  }).join('');
-  return `<div class="page-heading"><div><h1>Carnet clients</h1><p>Clients grossistes, revendeurs, restaurants et particuliers.</p></div><button class="primary-button" data-action="new-client"><span class="plus">+</span> Nouveau client</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Répertoire clients</h2><p>${snapshot.clients.length} client${snapshot.clients.length > 1 ? 's' : ''}</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom / entreprise</th><th>Téléphone</th><th>E-mail</th><th>Commandes</th><th>Crédit restant</th><th>Canal</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Votre carnet est vide', 'Ajoutez vos clients pour retrouver leurs coordonnées lors des ventes.', '<button class="primary-button" data-action="new-client">Ajouter un client</button>')}</section>`;
-}
 
 function renderAnnualStats(snapshot) {
   const years = [...new Set([
@@ -466,7 +365,8 @@ function normalizeAscii(value) {
   return String(value ?? '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
-    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE');
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE')
+    .replace(/[\u00a0\u2007\u2009\u202f]/g, ' ');
 }
 
 function escapePdfText(value) {
@@ -687,274 +587,6 @@ async function openBandDetail(bandId) {
   setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
 }
 
-function renderAnnualStats(snapshot) {
-  const years = [...new Set([
-    ...snapshot.bands.map((band) => (band.arrival_date || '').slice(0, 4)),
-    ...snapshot.sales.map((sale) => (sale.sale_date || '').slice(0, 4)),
-    ...snapshot.charges.map((charge) => (charge.charge_date || '').slice(0, 4)),
-  ].filter(Boolean))].sort().reverse();
-  if (!years.length) years.push(String(new Date().getFullYear()));
-  const rows = years.map((year) => {
-    const bands = snapshot.bands.filter((band) => (band.arrival_date || '').startsWith(year));
-    const sales = snapshot.sales.filter((sale) => (sale.sale_date || '').startsWith(year));
-    const charges = snapshot.charges.filter((charge) => (charge.charge_date || '').startsWith(year));
-    const logs = snapshot.logs.filter((log) => {
-      const band = snapshot.bands.find((b) => b.id === log.batch_id);
-      return band && (band.arrival_date || '').startsWith(year);
-    });
-    const initial = sum(bands, (band) => band.initial_count);
-    const deaths = sum(logs, (log) => log.mortality);
-    const sold = sum(sales, (sale) => sale.heads);
-    const revenue = sum(sales, (sale) => sale.total_amount);
-    const costs = sum(bands, (band) => bandCost(band, snapshot)) + sum(charges.filter((c) => !c.batch_id), (c) => c.amount);
-    const profit = revenue - costs;
-    return `<tr><td class="primary-cell">${esc(year)}</td><td>${number(bands.length)}</td><td>${number(initial)}</td><td>${number(deaths)}</td><td>${number(sold)}</td><td>${currency(revenue)}</td><td>${currency(costs)}</td><td class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</td></tr>`;
-  }).join('');
-  const totalRevenue = sum(snapshot.sales, (sale) => sale.total_amount);
-  const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot)) + sum(snapshot.charges.filter((c) => !c.batch_id), (c) => c.amount);
-  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan par année de votre exploitation.</p></div></div>
-    <section class="metrics-grid">
-      ${metricCard('Chiffre d’affaires total', currency(totalRevenue), 'Toutes années', 'money')}
-      ${metricCard('Dépenses totales', currency(totalCosts), 'Toutes années', 'expenses')}
-      ${metricCard('Bénéfice total', currency(totalRevenue - totalCosts), 'Toutes années', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
-      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Toutes années', 'bands')}
-    </section>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${rows}</tbody></table></div>
-    </section>`;
-}
-
-
-function strToBytes(value) {
-  const bytes = new Uint8Array(value.length);
-  for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i) & 0xff;
-  return bytes;
-}
-
-function normalizeAscii(value) {
-  return String(value ?? '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
-    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE');
-}
-
-function escapePdfText(value) {
-  return normalizeAscii(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-}
-
-function buildReceiptPdf(sale, band) {
-  const total = Number(sale.total_amount) || 0;
-  const paid = Number(sale.paid_amount) || 0;
-  const due = total - paid;
-  const lines = [];
-  lines.push('RECU DE VENTE - VOLAILLE CHEZ TALL');
-  lines.push('');
-  lines.push(`Date : ${dateLabel(sale.sale_date)}`);
-  lines.push(`Client : ${sale.client_name || 'Vente comptoir'}`);
-  lines.push(`Telephone : ${sale.client_phone || '-'}`);
-  lines.push(`Adresse : ${sale.client_address || '-'}`);
-  lines.push(`Bande source : ${band?.name || '-'}`);
-  lines.push(`Nombre de sujets : ${number(sale.heads)}`);
-  lines.push(`Poids total : ${number(sale.total_weight_kg, 1)} kg`);
-  lines.push(`Prix par kg : ${currency(sale.price_per_kg)}`);
-  lines.push('');
-  if (due > 0) {
-    lines.push(`Montant paye : ${currency(paid)}`);
-    lines.push(`Reste a payer (reliquat) : ${currency(due)}`);
-    lines.push(`Montant global : ${currency(total)}`);
-  } else {
-    lines.push(`Montant global regle : ${currency(total)}`);
-  }
-  lines.push('');
-  lines.push('Merci pour votre achat.');
-
-  const chunks = [];
-  let totalLen = 0;
-  const add = (chunk) => {
-    const bytes = typeof chunk === 'string' ? strToBytes(chunk) : chunk;
-    chunks.push(bytes);
-    totalLen += bytes.length;
-  };
-  const objOffsets = [];
-  const mark = () => totalLen;
-
-  add('%PDF-1.4\n');
-  objOffsets[1] = mark(); add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
-  objOffsets[2] = mark(); add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
-
-  let pageObj = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>';
-  if (logoJpeg) pageObj += ' /XObject << /Im1 6 0 R >>';
-  pageObj += ' >> >>\nendobj\n';
-  objOffsets[3] = mark(); add(pageObj);
-
-  const contentParts = [];
-  let y = 700;
-  if (logoJpeg) {
-    const w = logoJpeg.width;
-    const h = logoJpeg.height;
-    contentParts.push('q');
-    contentParts.push(`${w} 0 0 ${h} 50 ${y - h} cm`);
-    contentParts.push('/Im1 Do');
-    contentParts.push('Q');
-    y -= (h + 12);
-  }
-  contentParts.push('BT');
-  contentParts.push('/F1 14 Tf');
-  for (const line of lines) {
-    contentParts.push(`1 0 0 1 50 ${y} Tm`);
-    contentParts.push(`(${escapePdfText(line)}) Tj`);
-    y -= 18;
-  }
-  contentParts.push('ET');
-  const stream = contentParts.join('\n');
-  const streamBytes = strToBytes(stream);
-  objOffsets[4] = mark();
-  add(`4 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n`);
-  add(streamBytes);
-  add('\nendstream\nendobj\n');
-
-  objOffsets[5] = mark(); add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
-
-  const numObjs = logoJpeg ? 6 : 5;
-  if (logoJpeg) {
-    objOffsets[6] = mark();
-    add(`6 0 obj\n<< /Type /XObject /Subtype /Image /Width ${logoJpeg.width} /Height ${logoJpeg.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.data.length} >>\nstream\n`);
-    add(logoJpeg.data);
-    add('\nendstream\nendobj\n');
-  }
-
-  const xrefPos = totalLen;
-  add(`xref\n0 ${numObjs + 1}\n`);
-  add('0000000000 65535 f \n');
-  for (let i = 1; i <= numObjs; i++) add(`${String(objOffsets[i]).padStart(10, '0')} 00000 n \n`);
-  add(`trailer\n<< /Size ${numObjs + 1} /Root 1 0 R >>\n`);
-  add(`startxref\n${xrefPos}\n%%EOF\n`);
-
-  const finalLen = chunks.reduce((a, c) => a + c.length, 0);
-  const result = new Uint8Array(finalLen);
-  let off = 0;
-  for (const c of chunks) { result.set(c, off); off += c.length; }
-  return result;
-}
-
-function generateReceipt(sale, band) {
-  const bytes = buildReceiptPdf(sale, band);
-  const blob = new Blob([bytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.download = `recu-${safeName}-${sale.sale_date || 'vente'}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
-}
-
-function downloadReceipt(saleId, button) {
-  const btn = button || document.querySelector(`button[data-sale-id="${saleId}"]`);
-  let sale = null;
-  if (btn && btn.dataset) {
-    sale = {
-      id: btn.dataset.saleId,
-      client_name: btn.dataset.clientName,
-      client_phone: btn.dataset.clientPhone,
-      client_address: btn.dataset.clientAddress,
-      sale_date: btn.dataset.saleDate,
-      heads: Number(btn.dataset.heads) || 0,
-      total_weight_kg: Number(btn.dataset.totalWeight) || 0,
-      price_per_kg: Number(btn.dataset.price) || 0,
-      total_amount: Number(btn.dataset.total) || 0,
-      paid_amount: Number(btn.dataset.paid) || 0,
-    };
-  }
-  if (!sale) {
-    const snapshot = window.snapshot || {};
-    sale = (snapshot.sales || []).find((item) => item.id === saleId);
-  }
-  if (!sale) { toast('Vente introuvable.', true); return; }
-  const bandName = btn && btn.dataset ? btn.dataset.bandName : null;
-  const snapshot = window.snapshot || {};
-  const band = bandName ? { name: bandName } : (snapshot.bands || []).find((item) => item.id === sale.batch_id);
-  generateReceipt(sale, band);
-}
-
-async function openCreditsDialog() {
-  const snapshot = await getSnapshot();
-  const outstanding = snapshot.sales.filter((sale) => Number(sale.total_amount) - Number(sale.paid_amount) > 0);
-  if (!outstanding.length) { toast('Aucun crédit client en cours.'); return; }
-  const body = `
-    <div class="dialog-form">
-      <h3>Crédits clients</h3>
-      <p>Cliquez sur un règlement pour justifier le paiement du reste.</p>
-      ${outstanding.map((sale) => {
-        const due = Number(sale.total_amount) - Number(sale.paid_amount);
-        return `<div class="cost-preview" style="display:block;margin-bottom:10px">
-          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
-          <div>Reste à payer : ${currency(due)}</div>
-          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-            <input type="number" min="0" step="1" max="${due}" placeholder="Montant payé" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
-            <button class="primary-button" type="button" data-action="record-credit-payment" data-sale-id="${esc(sale.id)}">Enregistrer</button>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
-    </div>`;
-  setDialog('Crédits clients', 'Justifiez les paiements restants.', body);
-}
-
-async function recordCreditPayment(saleId, button) {
-  const input = document.querySelector(`[data-credit-input="${saleId}"]`);
-  const amount = Number(input && input.value) || 0;
-  if (amount <= 0) { toast('Saisissez un montant valide.', true); return; }
-  const snapshot = await getSnapshot();
-  const sale = snapshot.sales.find((item) => item.id === saleId);
-  if (!sale) { toast('Vente introuvable.', true); return; }
-  const due = Number(sale.total_amount) - Number(sale.paid_amount);
-  if (amount > due) { toast('Le montant dépasse le reste à payer.', true); return; }
-  const newPaid = Number(sale.paid_amount) + amount;
-  const updated = { ...sale, paid_amount: newPaid, payment_status: newPaid >= Number(sale.total_amount) ? 'paid' : 'partial' };
-  await saveRecord('sales', updated);
-  toast('Paiement enregistré.');
-  if (newPaid >= Number(sale.total_amount)) {
-    if (confirm('Solde réglé. Télécharger le reçu ?')) downloadReceipt(saleId);
-  }
-  closeDialog();
-  await render();
-}
-
-
-async function openBandDetail(bandId) {
-  const snapshot = await getSnapshot();
-  const band = snapshot.bands.find((item) => item.id === bandId);
-  if (!band) { toast('Bande introuvable.', true); return; }
-  const logs = snapshot.logs.filter((log) => log.batch_id === band.id).sort((a, b) => b.log_date.localeCompare(a.log_date));
-  const sales = snapshot.sales.filter((sale) => sale.batch_id === band.id).sort((a, b) => b.sale_date.localeCompare(a.sale_date));
-  const charges = snapshot.charges.filter((charge) => charge.batch_id === band.id).sort((a, b) => b.charge_date.localeCompare(a.charge_date));
-  const birds = activeBirds(band, snapshot);
-  const deaths = sum(logs, (log) => log.mortality);
-  const revenue = sum(sales, (sale) => sale.total_amount);
-  const costs = bandCost(band, snapshot);
-  const body = `
-    <div class="dialog-form">
-      <h3>${esc(band.name)}</h3>
-      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</p>
-      <div class="metrics-grid" style="margin:12px 0">
-        ${metricCard('Sujets en élevage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
-        ${metricCard('Mortalité cumulée', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
-        ${metricCard('Chiffre d’affaires', currency(revenue), `${sales.length} vente(s)`, 'money')}
-        ${metricCard('Dépenses', currency(costs), 'Coût cumulé du lot', 'expenses')}
-        ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
-      </div>
-      <h3>Relevés (${logs.length})</h3>
-      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
-      <h3>Ventes (${sales.length})</h3>
-      ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
-      <h3>Charges (${charges.length})</h3>
-      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
-    </div>`;
-  setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
-}
 
 async function render() {
   const snapshot = await getSnapshot();
@@ -964,17 +596,9 @@ async function render() {
   $('#page-container').setAttribute('aria-labelledby', `tab-${currentPage}`);
   $('#page-title').textContent = PAGE_LABELS[currentPage];
   $('#band-count').textContent = snapshot.bands.length;
-  $('#pending-count').textContent = snapshot.outbox.length;
-  $('#pending-count').classList.toggle('has-pending', snapshot.outbox.length > 0);
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date());
   $('#connection-label').textContent = navigator.onLine ? 'Mode hors ligne prêt' : 'Connexion indisponible';
-  $('#sync-label').textContent = snapshot.outbox.length ? `${snapshot.outbox.length} modification${snapshot.outbox.length > 1 ? 's' : ''} en attente` : 'Données enregistrées ici';
   $('.offline-dot').classList.toggle('offline', !navigator.onLine);
-  $('#sync-button').disabled = syncInProgress || !snapshot.outbox.length;
-  $('#sync-button').setAttribute('aria-label', snapshot.outbox.length
-    ? `Synchroniser ${snapshot.outbox.length} modification${snapshot.outbox.length === 1 ? '' : 's'} en attente`
-    : 'Aucune modification en attente de synchronisation');
-  $('#sync-button').setAttribute('aria-busy', String(syncInProgress));
 }
 
 async function setPage(page, { pushHistory = false, focusTab = false, scrollToTop = false } = {}) {
@@ -1037,20 +661,6 @@ async function openDailyForm() {
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer le relevé</button></div></form>`);
 }
 
-function openStockForm() {
-  setDialog('Entrée de stock', 'Ajoutez un produit ou réceptionnez une nouvelle livraison.', `
-    <form class="dialog-form" id="stock-form"><div class="form-grid">
-      <div class="field full"><label for="stock-name">Nom du produit *</label><input id="stock-name" name="name" required maxlength="100" placeholder="Ex. Aliment croissance — sac 50 kg" /></div>
-      <div class="field"><label for="stock-category">Catégorie *</label><select id="stock-category" name="category"><option value="starter">Aliment démarrage</option><option value="grower">Aliment croissance</option><option value="finisher">Aliment finition</option><option value="veterinary">Produits vétérinaires</option><option value="bedding">Litière / copeaux</option><option value="heating">Gaz / chauffage</option><option value="other">Autre intrant</option></select></div>
-      <div class="field"><label for="stock-unit">Unité *</label><select id="stock-unit" name="unit"><option value="kg">kg</option><option value="sac">sac</option><option value="litre">litre</option><option value="unité">unité</option></select></div>
-      <div class="field"><label for="stock-quantity">Quantité reçue *</label><input id="stock-quantity" name="quantity" type="number" inputmode="decimal" min="0.01" step="0.01" required /></div>
-      <div class="field"><label for="stock-threshold">Seuil d’alerte</label><input id="stock-threshold" name="min_quantity" type="number" inputmode="decimal" min="0" step="0.01" value="0" /></div>
-      <div class="field"><label for="stock-unit-cost">Prix d’achat par unité (FCFA)</label><input id="stock-unit-cost" name="unit_cost" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="stock-transport">Transport de cette livraison (FCFA)</label><input id="stock-transport" name="transport_cost" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="stock-date">Date de réception *</label><input id="stock-date" name="movement_date" type="date" value="${today()}" required /></div>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer la livraison</button></div></form>`);
-}
-
 async function openSaleForm() {
   const snapshot = await getSnapshot();
   const bands = snapshot.bands.filter((band) => band.status !== 'closed' && activeBirds(band, snapshot) > 0);
@@ -1088,16 +698,6 @@ async function openChargeForm() {
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer la charge</button></div></form>`);
 }
 
-function openClientForm() {
-  setDialog('Nouveau client', 'Enregistrez les coordonnées de vos acheteurs habituels.', `
-    <form class="dialog-form" id="client-form"><div class="form-grid">
-      <div class="field full"><label for="client-name">Nom / entreprise *</label><input id="client-name" name="name" required maxlength="120" placeholder="Ex. Restaurant Le Marché" /></div>
-      <div class="field"><label for="client-phone">Téléphone / WhatsApp</label><input id="client-phone" name="phone" type="tel" autocomplete="tel" maxlength="30" placeholder="+221…" /></div>
-      <div class="field"><label for="client-email">E-mail</label><input id="client-email" name="email" type="email" autocomplete="email" maxlength="160" placeholder="contact@entreprise.com" /></div>
-      <div class="field"><label for="client-channel">Canal de vente</label><select id="client-channel" name="channel"><option value="wholesale">Grossiste / revendeur</option><option value="restaurant">Restaurant</option><option value="supermarket">Supermarché</option><option value="retail">Détail / comptoir</option><option value="other">Autre</option></select></div>
-      <div class="field"><label for="client-note">Note</label><input id="client-note" name="note" maxlength="200" placeholder="Préférences, adresse…" /></div>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer le client</button></div></form>`);
-}
 
 async function handleSubmit(event) {
   const form = event.target;
@@ -1131,63 +731,8 @@ async function handleSubmit(event) {
     if (snapshot.logs.some((log) => log.batch_id === values.batch_id && log.log_date === values.log_date)) {
       throw new Error('Un relevé existe déjà pour cette bande et cette date.');
     }
-    const quantities = { starter: values.feed_starter_kg, grower: values.feed_grower_kg, finisher: values.feed_finisher_kg };
-    let feedCost = 0;
-    const stockPlan = [];
-    for (const [category, requested] of Object.entries(quantities)) {
-      if (!requested) continue;
-      const categoryItems = snapshot.items.filter((item) => item.category === category);
-      if (!categoryItems.length) throw new Error(`Ajoutez d’abord l’aliment ${CATEGORY_LABELS[category]} aux stocks pour enregistrer sa consommation et son coût.`);
-      const kgItems = categoryItems.filter((item) => item.unit === 'kg');
-      if (!kgItems.length) throw new Error(`L’aliment ${CATEGORY_LABELS[category]} doit être inventorié en kg pour suivre sa consommation quotidienne.`);
-      let remaining = requested;
-      for (const stock of kgItems) {
-        const quantity = Math.min(remaining, Number(stock.quantity));
-        if (quantity > 0) {
-          feedCost += quantity * Number(stock.average_unit_cost || 0);
-          stockPlan.push({ stock, requested: quantity });
-          remaining -= quantity;
-        }
-        if (remaining <= 0) break;
-      }
-      if (remaining > 0) {
-        const available = sum(kgItems, (item) => item.quantity);
-        throw new Error(`Stock insuffisant pour ${CATEGORY_LABELS[category]} (${number(available, 1)} kg disponible).`);
-      }
-    }
-    const record = { ...base, ...values, feed_cost: feedCost };
-    const entries = [{ store: 'daily_logs', record }];
-    for (const { stock, requested } of stockPlan) {
-      entries.push({
-        store: 'inventory_items',
-        record: { ...stock, quantity: Number(stock.quantity) - requested, organization_id: stock.organization_id || base.organization_id },
-      });
-      entries.push({
-        store: 'inventory_movements',
-        record: {
-        ...base, id: uid(), item_id: stock.id, batch_id: values.batch_id, movement_type: 'consumption',
-        quantity_delta: -requested, unit_cost: Number(stock.average_unit_cost || 0), transport_cost: 0, movement_date: values.log_date,
-        },
-      });
-    }
-    await saveRecords(entries);
-  } else if (formId === 'stock-form') {
-    const existing = (await readAll('inventory_items')).find((item) => item.name.toLowerCase() === values.name.trim().toLowerCase() && item.unit === values.unit);
-    const costIncludingTransport = values.quantity ? ((values.quantity * values.unit_cost + values.transport_cost) / values.quantity) : 0;
-    const totalQuantity = Number(existing?.quantity || 0) + values.quantity;
-    const average = totalQuantity
-      ? ((Number(existing?.quantity || 0) * Number(existing?.average_unit_cost || 0)) + (values.quantity * costIncludingTransport)) / totalQuantity
-      : costIncludingTransport;
-    const item = {
-      ...base, id: existing?.id || uid(), organization_id: existing?.organization_id || base.organization_id,
-      name: values.name.trim(), category: values.category, unit: values.unit, min_quantity: values.min_quantity,
-      quantity: totalQuantity, average_unit_cost: average,
-    };
-    await saveRecord('inventory_items', item);
-    await saveRecord('inventory_movements', {
-      ...base, item_id: item.id, batch_id: null, movement_type: 'purchase', quantity_delta: values.quantity,
-      unit_cost: values.unit_cost, transport_cost: values.transport_cost, movement_date: values.movement_date,
-    });
+    const record = { ...base, ...values, feed_cost: 0 };
+    await saveRecords([{ store: 'daily_logs', record }]);
   } else if (formId === 'sale-form') {
     const snapshot = await getSnapshot();
     const band = snapshot.bands.find((item) => item.id === values.batch_id);
@@ -1199,161 +744,12 @@ async function handleSubmit(event) {
       ...base, ...values, client_id: values.client_id || null,
       total_weight_kg: totalWeight, total_amount: totalAmount, payment_status: values.paid_amount >= totalAmount ? 'paid' : 'partial',
     });
-  } else if (form.id === 'charge-form') {
+  } else if (formId === 'charge-form') {
     await saveRecord('charges', { ...base, ...values, batch_id: values.batch_id || null });
-  } else if (form.id === 'client-form') {
-    await saveRecord('clients', { ...base, ...values, name: values.name.trim() });
   }
   closeDialog();
   await render();
   toast('Enregistré sur cet appareil.');
-}
-
-async function assignOrganization(organizationId) {
-  const currentOrganization = await readMeta('organization_id');
-  if (currentOrganization && currentOrganization !== organizationId) {
-    throw new Error('Ces données locales sont déjà liées à une autre exploitation. Utilisez un navigateur/profil séparé pour éviter de mélanger les comptes.');
-  }
-  await writeMeta('organization_id', organizationId);
-  const names = STORE_NAMES.filter((name) => !['outbox', 'meta'].includes(name));
-  const all = await Promise.all(names.map((name) => readAll(name)));
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([...names, 'outbox'], 'readwrite');
-    names.forEach((name, index) => all[index].forEach((record) => {
-      if (!record.organization_id || record.organization_id !== organizationId) {
-        transaction.objectStore(name).put({ ...record, organization_id: organizationId });
-      }
-    }));
-    transaction.objectStore('outbox').getAll().onsuccess = (event) => {
-      for (const entry of event.target.result) {
-        if (CLOUD_TABLES[entry.entity]) transaction.objectStore('outbox').put({
-          ...entry, record: { ...entry.record, organization_id: organizationId },
-        });
-      }
-    };
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Impossible d’associer les données à l’exploitation.'));
-  });
-}
-
-async function supabaseFetch(path, options = {}, retry = true) {
-  const config = JSON.parse(localStorage.getItem('poulet-supabase-config') || '{}');
-  const accessToken = sessionStorage.getItem('poulet-access-token');
-  if (!config.url || !config.anonKey || !accessToken) throw new Error('Connectez-vous à Supabase depuis Paramètres avant de synchroniser.');
-  const response = await fetch(`${config.url.replace(/\/+$/, '')}${path}`, {
-    ...options,
-    headers: {
-      apikey: config.anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  });
-  if (response.status === 401 && retry && sessionStorage.getItem('poulet-refresh-token')) {
-    const refreshed = await fetch(`${config.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST', headers: { apikey: config.anonKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: sessionStorage.getItem('poulet-refresh-token') }),
-    });
-    if (refreshed.ok) {
-      const session = await refreshed.json();
-      sessionStorage.setItem('poulet-access-token', session.access_token);
-      sessionStorage.setItem('poulet-refresh-token', session.refresh_token);
-      return supabaseFetch(path, options, false);
-    }
-  }
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Supabase (${response.status}) : ${message.slice(0, 220)}`);
-  }
-  if (response.status === 204) return null;
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
-}
-
-async function connectSupabase(config, credentials, organizationName) {
-  localStorage.setItem('poulet-supabase-config', JSON.stringify(config));
-  const response = await fetch(`${config.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=password`, {
-    method: 'POST', headers: { apikey: config.anonKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(credentials),
-  });
-  if (!response.ok) throw new Error(`Connexion refusée : ${(await response.text()).slice(0, 180)}`);
-  const session = await response.json();
-  sessionStorage.setItem('poulet-access-token', session.access_token);
-  sessionStorage.setItem('poulet-refresh-token', session.refresh_token);
-  const memberships = await supabaseFetch(`/rest/v1/organization_members?select=organization_id&user_id=eq.${encodeURIComponent(session.user.id)}&limit=1`);
-  let organizationId = memberships?.[0]?.organization_id;
-  if (!organizationId) {
-    const created = await supabaseFetch('/rest/v1/rpc/create_farm', {
-      method: 'POST', body: JSON.stringify({ p_name: organizationName || 'Mon exploitation' }),
-    });
-    organizationId = typeof created === 'string' ? created : created?.id;
-  }
-  if (!organizationId) throw new Error('Aucune exploitation associée à ce compte. Vérifiez le schéma SQL Supabase.');
-  await assignOrganization(organizationId);
-}
-
-async function syncData() {
-  if (syncInProgress || !navigator.onLine) {
-    if (!navigator.onLine) toast('Pas de connexion Internet. Les données restent en attente sur cet appareil.', true);
-    return;
-  }
-  syncInProgress = true;
-  $('#sync-button').classList.add('sync-spinning');
-  $('#sync-button').disabled = true;
-  try {
-    let queue = (await readAll('outbox')).sort((a, b) => a.created_at.localeCompare(b.created_at));
-    for (const event of queue) {
-      const table = CLOUD_TABLES[event.entity];
-      if (!table) { await removeOutbox(event.id); continue; }
-      const record = { ...event.record, organization_id: await readMeta('organization_id') || event.record.organization_id };
-      if (!record.organization_id) throw new Error('Associez d’abord cette installation à une exploitation Supabase.');
-      await supabaseFetch(`/rest/v1/${table}?on_conflict=id`, {
-        method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(record),
-      });
-      await removeOutbox(event.id);
-    }
-    const organizationId = await readMeta('organization_id');
-    if (organizationId) {
-      for (const [store, table] of Object.entries(CLOUD_TABLES)) {
-        let offset = 0;
-        let page;
-        do {
-          page = await supabaseFetch(`/rest/v1/${table}?select=*&organization_id=eq.${encodeURIComponent(organizationId)}&limit=1000&offset=${offset}`);
-          if (page?.length) {
-            await new Promise((resolve, reject) => {
-              const transaction = db.transaction(store, 'readwrite');
-              const objectStore = transaction.objectStore(store);
-              for (const record of page) objectStore.put(record);
-              transaction.oncomplete = resolve;
-              transaction.onerror = () => reject(transaction.error || new Error(`Téléchargement impossible : ${table}.`));
-            });
-          }
-          offset += page?.length || 0;
-        } while (page?.length === 1000);
-      }
-    }
-    toast('Synchronisation terminée.');
-  } catch (error) {
-    toast(error.message || 'Échec de la synchronisation.', true);
-  } finally {
-    syncInProgress = false;
-    $('#sync-button').classList.remove('sync-spinning');
-    await render();
-  }
-}
-
-async function openSettings() {
-  const config = { url: DEFAULT_SUPABASE_URL, ...JSON.parse(localStorage.getItem('poulet-supabase-config') || '{}') };
-  const connected = Boolean(sessionStorage.getItem('poulet-access-token'));
-  setDialog('Paramètres & synchronisation', 'Le mode local fonctionne sans compte. Connectez Supabase pour synchroniser plusieurs appareils.', `
-    <form class="dialog-form" id="settings-form"><div class="form-grid">
-      <div class="field full"><label for="farm-name">Nom de l’exploitation</label><input id="farm-name" name="organization_name" maxlength="100" value="Mon exploitation" /></div>
-      <div class="field full"><label for="supabase-url">URL du projet Supabase</label><input id="supabase-url" name="url" type="url" value="${esc(config.url || '')}" placeholder="https://votre-projet.supabase.co" /></div>
-      <div class="field full"><label for="supabase-key">Clé publique anon / publishable</label><input id="supabase-key" name="anon_key" value="${esc(config.anonKey || '')}" autocomplete="off" placeholder="eyJ…" /></div>
-      <div class="field"><label for="supabase-email">E-mail du compte *</label><input id="supabase-email" name="email" type="email" autocomplete="username" required /></div>
-      <div class="field"><label for="supabase-password">Mot de passe *</label><input id="supabase-password" name="password" type="password" autocomplete="current-password" required /></div>
-      <div class="field full"><span class="field-hint">${connected ? 'Compte Supabase connecté dans cet onglet. Votre mot de passe n’est jamais enregistré.' : 'Projet préconfiguré : Volaillecheztall (avoktrlsmbnisxxvxogc). Renseignez sa clé publique anon/publishable ; ne saisissez jamais une clé service_role.'}</span></div>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button>${connected ? '<button class="secondary-button danger-button" type="button" data-action="disconnect">Déconnecter</button>' : ''}<button class="primary-button" type="submit">${connected ? 'Reconnecter le compte' : 'Connecter et synchroniser'}</button></div></form>`);
 }
 
 async function handleAction(action, button = null) {
@@ -1381,13 +777,7 @@ async function handleAction(action, button = null) {
   else if (action === 'new-daily') await openDailyForm();
   else if (action === 'new-sale') await openSaleForm();
   else if (action === 'new-charge') await openChargeForm();
-  else if (action === 'settings') await openSettings();
-  else if (action === 'disconnect') {
-    sessionStorage.removeItem('poulet-access-token');
-    sessionStorage.removeItem('poulet-refresh-token');
-    closeDialog();
-    toast('Compte Supabase déconnecté. Les données locales sont conservées.');
-  }
+  else if (action === 'settings') toast('Paramètres locaux uniquement.');
 }
 
 async function routeEvent(event) {
@@ -1425,36 +815,14 @@ function handleTabKeydown(event) {
 async function main() {
   db = await openDatabase();
   await preloadLogo();
-  await preloadLogo();
   document.querySelectorAll('[data-icon]').forEach((node) => {
     if (ICONS[node.dataset.icon]) node.innerHTML = icon(node.dataset.icon);
   });
   document.addEventListener('click', routeEvent);
   $('#main-nav').addEventListener('keydown', handleTabKeydown);
   $('#dialog-content').addEventListener('submit', (event) => {
-    if (event.target.id !== 'settings-form') {
-      handleSubmit(event).catch((error) => toast(error.message || 'Échec de l’enregistrement.', true));
-      return;
-    }
-    (async () => {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(event.target).entries());
-      if (!data.url || !data.anon_key || !data.email || !data.password) {
-        toast('Renseignez l’URL, la clé publique, l’e-mail et le mot de passe.', true);
-        return;
-      }
-      try {
-        await connectSupabase({ url: data.url, anonKey: data.anon_key }, { email: data.email, password: data.password }, data.organization_name);
-        closeDialog();
-        toast('Compte connecté. Synchronisation de vos données…');
-        await syncData();
-      } catch (error) {
-        toast(error.message || 'Connexion Supabase impossible.', true);
-      }
-    })();
+    handleSubmit(event).catch((error) => toast(error.message || 'Échec de l’enregistrement.', true));
   });
-  $('#sync-button').addEventListener('click', syncData);
-  $('#settings-button').addEventListener('click', () => handleAction('settings'));
   $('#app-dialog').addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
