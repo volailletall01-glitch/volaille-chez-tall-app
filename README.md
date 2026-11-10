@@ -4,9 +4,17 @@ Application web progressive (PWA) pour l’élevage et la commercialisation de p
 
 ## Application en ligne
 
+Déploiement continu depuis ce dépôt (GitHub Pages) :
+https://volailletall01-glitch.github.io/volaille-chez-tall-app/
+
+Déploiement Vercel existant (déjà installé sur certains appareils) :
 https://volaille-chez-tall.vercel.app
 
+> Les données sont propres à chaque adresse. Un appareil qui utilise déjà l’adresse Vercel continue d’y voir ses données ; une nouvelle adresse démarre avec une base vide.
+
 Le code est hébergé sur GitHub : https://github.com/volailletall01-glitch/volaille-chez-tall-app
+
+Chaque push sur `main` déclenche le déploiement via [deploy-pages.yml](./.github/workflows/deploy-pages.yml).
 
 ## Démarrer en local
 
