@@ -10,6 +10,7 @@ const ICONS = {
   sales: '<path d="M3 6h2l2 11h11l3-8H6"/><circle cx="9" cy="21" r="1"/><circle cx="17" cy="21" r="1"/><path d="M10 10h6m-3-3v6"/>',
   expenses: '<path d="M12 3v18m5-13a3 3 0 0 0-3-2h-4a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6h-4a3 3 0 0 1-3-2"/>',
   clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  stats: '<path d="M4 20V10m6 10V4m6 16v-7m6 7V7"/><path d="M3 20h18"/>',
   sync: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1.1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1.1l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1.1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1.1l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 2Z" transform="translate(-1 -1) scale(1.08)"/>',
   bird: '<path d="M20 12c0 4-3 7-8 7H8l-3 2 1-4c-2-2-3-4-3-7 0-4 3-7 8-7s9 4 9 9Z"/><circle cx="15" cy="10" r="1"/>',
@@ -18,7 +19,7 @@ const ICONS = {
   money: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M7 9h.01M17 15h.01"/>',
   box: '<path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>',
 };
-const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', stock: 'Stocks', sales: 'Ventes', expenses: 'Charges', clients: 'Clients' };
+const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', expenses: 'Charges', annual: 'Statistiques annuelles' };
 const CATEGORY_LABELS = {
   starter: 'Aliment démarrage', grower: 'Aliment croissance', finisher: 'Aliment finition',
   veterinary: 'Produits vétérinaires', bedding: 'Litière / copeaux', heating: 'Gaz / chauffage', other: 'Autre intrant',
@@ -32,6 +33,7 @@ const CLOUD_TABLES = {
   inventory_movements: 'inventory_movements', sales: 'poultry_sales', charges: 'charges', clients: 'clients',
 };
 let db;
+let logoJpeg = null;
 let currentPage = 'dashboard';
 let syncInProgress = false;
 
@@ -49,6 +51,68 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':
 const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
 const daysSince = (date) => Math.max(0, Math.floor((new Date(`${today()}T12:00:00`) - new Date(`${date}T12:00:00`)) / 86400000));
 const sum = (items, getter) => items.reduce((total, item) => total + (Number(getter(item)) || 0), 0);
+
+async function preloadLogo() {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = './icons/volaille-chez-tall-logo.png';
+    });
+    const scale = Math.min(1, 90 / (img.width || 90));
+    const w = Math.max(1, Math.round((img.width || 90) * scale));
+    const h = Math.max(1, Math.round((img.height || 90) * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const base64 = dataUrl.split(',')[1] || '';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    logoJpeg = { data: bytes, width: w, height: h };
+  } catch (error) {
+    console.error('Logo non charge', error);
+    logoJpeg = null;
+  }
+}
+
+async function preloadLogo() {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = './icons/volaille-chez-tall-logo.png';
+    });
+    const scale = Math.min(1, 90 / (img.width || 90));
+    const w = Math.max(1, Math.round((img.width || 90) * scale));
+    const h = Math.max(1, Math.round((img.height || 90) * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const base64 = dataUrl.split(',')[1] || '';
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    logoJpeg = { data: bytes, width: w, height: h };
+  } catch (error) {
+    console.error('Logo non charge', error);
+    logoJpeg = null;
+  }
+}
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -126,6 +190,50 @@ async function removeOutbox(id) {
   });
 }
 
+
+async function deleteRecord(storeName, id) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).delete(id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
+  });
+}
+
+async function deleteLogsForBand(bandId) {
+  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
+  if (!logs.length) return;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('daily_logs', 'readwrite');
+    const store = transaction.objectStore('daily_logs');
+    for (const log of logs) store.delete(log.id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
+  });
+}
+
+
+async function deleteRecord(storeName, id) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    transaction.objectStore(storeName).delete(id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
+  });
+}
+
+async function deleteLogsForBand(bandId) {
+  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
+  if (!logs.length) return;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('daily_logs', 'readwrite');
+    const store = transaction.objectStore('daily_logs');
+    for (const log of logs) store.delete(log.id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
+  });
+}
+
 async function getSnapshot() {
   const [bands, logs, items, movements, sales, charges, clients, outbox] = await Promise.all([
     readAll('bands'), readAll('daily_logs'), readAll('inventory_items'), readAll('inventory_movements'),
@@ -195,63 +303,28 @@ function metricCard(label, value, note, iconName, noteClass = '') {
 function renderDashboard(snapshot) {
   const active = snapshot.bands.filter((band) => band.status !== 'closed');
   const live = sum(active, (band) => activeBirds(band, snapshot));
-  const feedKg = sum(snapshot.logs, (log) => Number(log.feed_starter_kg) + Number(log.feed_grower_kg) + Number(log.feed_finisher_kg));
   const mortalities = sum(snapshot.logs, (log) => log.mortality);
   const initial = sum(snapshot.bands, (band) => band.initial_count);
   const mortalityRate = initial ? (mortalities / initial) * 100 : 0;
-  const liveBiomass = sum(active, (band) => {
-    const latestWeight = [...snapshot.logs].filter((log) => log.batch_id === band.id && log.avg_weight_kg > 0)
-      .sort((a, b) => b.log_date.localeCompare(a.log_date))[0]?.avg_weight_kg || 0;
-    return activeBirds(band, snapshot) * latestWeight;
-  }) + sum(snapshot.sales, (sale) => sale.total_weight_kg);
-  const feedConversion = liveBiomass > 0 ? number(feedKg / liveBiomass, 2) : '—';
   const revenue = sum(snapshot.sales, (sale) => sale.total_amount);
   const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot))
     + sum(snapshot.charges.filter((charge) => !charge.batch_id), (charge) => charge.amount);
   const profit = revenue - totalCosts;
-  const lowItems = snapshot.items.filter((item) => Number(item.quantity) <= Number(item.min_quantity));
-  const last7 = [...Array(7)].map((_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    const dayLogs = snapshot.logs.filter((log) => log.log_date === key);
-    return { day: new Intl.DateTimeFormat('fr-FR', { weekday: 'short' }).format(date).replace('.', ''), feed: sum(dayLogs, (log) => Number(log.feed_starter_kg) + Number(log.feed_grower_kg) + Number(log.feed_finisher_kg)) };
-  });
-  const maxFeed = Math.max(1, ...last7.map((day) => day.feed));
-  const recentBands = [...snapshot.bands].sort((a, b) => b.arrival_date.localeCompare(a.arrival_date)).slice(0, 5);
-  const rows = recentBands.map((band) => {
-    const birds = activeBirds(band, snapshot);
-    const days = daysSince(band.arrival_date);
-    const deaths = sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.mortality);
-    const rate = band.initial_count ? (deaths / Number(band.initial_count)) * 100 : 0;
-    return `<tr><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')}</span></td>
-      <td>${dateLabel(band.arrival_date)}</td><td>J${days}</td><td>${number(birds)}</td><td>${number(rate, 1)} %</td>
-      <td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td></tr>`;
-  }).join('');
-
-  return `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole.</p></div>
-    <button class="primary-button" data-action="new-band"><span class="plus">+</span> Créer une bande</button></div>
+  return `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole.</p></div></div>
     <section class="metrics-grid" aria-label="Indicateurs clés">
       ${metricCard('Sujets en élevage', number(live), `${active.length} bande${active.length > 1 ? 's' : ''} active${active.length > 1 ? 's' : ''}`, 'bird')}
-      ${metricCard('Aliment distribué', `${number(feedKg, 1)} <small>kg</small>`, 'Depuis le début des cycles', 'feed')}
       ${metricCard('Mortalité cumulée', `${number(mortalityRate, 1)} <small>%</small>`, `${number(mortalities)} sujet${mortalities > 1 ? 's' : ''} enregistré${mortalities > 1 ? 's' : ''}`, 'daily', mortalityRate > 5 ? 'low-stock' : '')}
       ${metricCard('Chiffre d’affaires', currency(revenue), `Marge estimée : ${currency(profit)}`, 'money', profit >= 0 ? 'positive' : 'low-stock')}
-      ${metricCard('Indice de consommation', feedConversion, liveBiomass ? 'kg aliment / kg vif mesuré' : 'Disponible après une pesée', 'feed')}
     </section>
-    <section class="dashboard-grid">
-      <article class="panel"><div class="panel-header"><div><h2>Consommation d’aliment</h2><p>Quantités saisies sur les 7 derniers jours</p></div><span class="status-pill neutral">kg / jour</span></div>
-        <div class="chart-area">${snapshot.logs.length ? last7.map((day) => `<div class="chart-column"><span class="chart-value">${day.feed ? number(day.feed, 1) : ''}</span><div class="chart-bar-track"><div class="chart-bar" style="height:${Math.max(day.feed ? 5 : 0, (day.feed / maxFeed) * 100)}%"></div></div><span class="chart-day">${esc(day.day)}</span></div>`).join('') : '<div class="chart-empty">Vos saisies de consommation apparaîtront ici.</div>'}</div>
-      </article>
-      <article class="panel"><div class="panel-header"><div><h2>Actions rapides</h2><p>Enregistrez une opération</p></div></div><div class="quick-actions">
-        <button class="quick-action" data-action="new-daily"><span class="quick-icon">${icon('daily')}</span><span class="quick-copy"><strong>Suivi du jour</strong><small>Mortalité, aliment, poids</small></span><span class="quick-arrow">›</span></button>
-        <button class="quick-action" data-action="new-stock"><span class="quick-icon">${icon('box')}</span><span class="quick-copy"><strong>Entrée de stock</strong><small>Aliments et intrants</small></span><span class="quick-arrow">›</span></button>
-        <button class="quick-action" data-action="new-sale"><span class="quick-icon">${icon('sales')}</span><span class="quick-copy"><strong>Nouvelle vente</strong><small>Commande et paiement</small></span><span class="quick-arrow">›</span></button>
-      </div></article>
-    </section>
-    ${lowItems.length ? `<section class="panel" style="margin-bottom:16px"><div class="panel-header"><div><h2>Alertes de stock</h2><p>${lowItems.length} référence${lowItems.length > 1 ? 's' : ''} au seuil minimum ou en dessous</p></div><button class="text-button" data-page="stock">Voir les stocks →</button></div><div class="table-wrap"><table><thead><tr><th>Produit</th><th>Catégorie</th><th>Disponible</th><th>Seuil</th></tr></thead><tbody>${lowItems.slice(0, 4).map((item) => `<tr><td class="primary-cell">${esc(item.name)}</td><td>${esc(item.category)}</td><td class="low-stock">${number(item.quantity, 1)} ${esc(item.unit)}</td><td>${number(item.min_quantity, 1)} ${esc(item.unit)}</td></tr>`).join('')}</tbody></table></div></section>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Bandes récentes</h2><p>Suivi des cycles de production actifs</p></div><button class="text-button" data-page="bands">Toutes les bandes →</button></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Mise en place</th><th>Âge</th><th>Sujets vivants</th><th>Mortalité</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : emptyState('Aucune bande pour le moment', 'Créez votre premier lot pour commencer le suivi.', '<button class="primary-button" data-action="new-band">Créer une bande</button>')}</section>`;
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Par bande</h2><p>Sujets en élevage, mortalité cumulée, chiffre d’affaires, dépenses et bénéfice par bande.</p></div></div>
+      ${snapshot.bands.length ? `<div class="table-wrap"><table><thead><tr><th>Bande</th><th>Sujets en élevage</th><th>Mortalité cumulée</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${snapshot.bands.map((band) => {
+        const birds = activeBirds(band, snapshot);
+        const deaths = sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.mortality);
+        const bandRevenue = sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.total_amount);
+        const costs = bandCost(band, snapshot);
+        const bandProfit = bandRevenue - costs;
+        return `<tr><td class="primary-cell">${esc(band.name)}</td><td>${number(birds)}</td><td>${number(deaths)}</td><td>${currency(bandRevenue)}</td><td>${currency(costs)}</td><td class="${bandProfit >= 0 ? 'positive' : 'low-stock'}">${currency(bandProfit)}</td></tr>`;
+      }).join('')}</tbody></table></div>` : emptyState('Aucune bande pour le moment', 'Créez votre premier lot pour commencer le suivi.', '<button class="primary-button" data-action="new-band">Créer une bande</button>')}</section>`;
 }
 
 function renderBands(snapshot) {
@@ -266,25 +339,29 @@ function renderBands(snapshot) {
     forecast.setDate(forecast.getDate() + Number(band.target_age_days || 42));
     const saleableHeads = birds + sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.heads);
     const unitCost = saleableHeads ? bandCost(band, snapshot) / saleableHeads : 0;
-    return `<tr><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</span></td>
+    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</span></td>
       <td>${dateLabel(band.arrival_date)}</td><td>J${days} / ${Number(band.target_age_days || 42)} j</td><td>${dateLabel(`${forecast.getFullYear()}-${String(forecast.getMonth() + 1).padStart(2, '0')}-${String(forecast.getDate()).padStart(2, '0')}`)}</td>
       <td>${number(birds)}</td><td>${number(percent, 1)} %</td><td>${weightText}</td><td>${currency(unitCost)}</td>
-      <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td></tr>`;
+      <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td>
+      <td class="actions-cell">
+        <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">✎</button>
+        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique">↺</button>
+        <button class="icon-button danger-button" type="button" data-action="delete-band" data-band-id="${esc(band.id)}" title="Supprimer">✕</button>
+      </td></tr>`;
   }).join('');
   return `<div class="page-heading"><div><h1>Bandes de production</h1><p>Suivez vos lots de poulets de chair du démarrage à la vente.</p></div><button class="primary-button" data-action="new-band"><span class="plus">+</span> Nouvelle bande</button></div>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${snapshot.bands.length} bande${snapshot.bands.length > 1 ? 's' : ''} enregistrée${snapshot.bands.length > 1 ? 's' : ''}</p></div></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>`;
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>`;
 }
 
 function renderDaily(snapshot) {
   const rows = [...snapshot.logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
     const band = snapshot.bands.find((item) => item.id === log.batch_id);
-    const totalFeed = Number(log.feed_starter_kg) + Number(log.feed_grower_kg) + Number(log.feed_finisher_kg);
-    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${number(totalFeed, 1)} kg</td><td>${number(log.water_liters, 1)} L</td><td>${log.avg_weight_kg ? `${number(log.avg_weight_kg, 3)} kg` : '—'}</td><td>${currency(Number(log.feed_cost) + Number(log.health_cost) + Number(log.other_cost))}</td></tr>`;
+    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`;
   }).join('');
-  return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les performances au poulailler, même sans connexion.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
+  return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalités et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${snapshot.logs.length} relevé${snapshot.logs.length > 1 ? 's' : ''}</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Morts</th><th>Tri</th><th>Aliment</th><th>Eau</th><th>Poids moyen</th><th>Coût saisi</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités, consommations et pesées se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
 }
 
 function renderStock(snapshot) {
@@ -307,16 +384,15 @@ function renderStock(snapshot) {
 function renderSales(snapshot) {
   const rows = [...snapshot.sales].sort((a, b) => b.sale_date.localeCompare(a.sale_date)).map((sale) => {
     const band = snapshot.bands.find((item) => item.id === sale.batch_id);
-    const client = snapshot.clients.find((item) => item.id === sale.client_id);
     const due = Number(sale.total_amount) - Number(sale.paid_amount);
-    return `<tr><td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(client?.name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td></tr>`;
+    return `<tr><td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td><td><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}">Télécharger le reçu</button></td></tr>`;
   }).join('');
   const revenue = sum(snapshot.sales, (sale) => sale.total_amount);
   const unpaid = sum(snapshot.sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
   return `<div class="page-heading"><div><h1>Ventes & commandes</h1><p>Associez chaque vente à son lot et suivez les règlements clients.</p></div><button class="primary-button" data-action="new-sale"><span class="plus">+</span> Nouvelle vente</button></div>
-    <section class="metrics-grid">${metricCard('Ventes enregistrées', number(snapshot.sales.length), 'Toutes périodes', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}${metricCard('Crédits clients', currency(unpaid), 'Reste à encaisser', 'daily')}${metricCard('Sujets vendus', number(sum(snapshot.sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
+    <section class="metrics-grid">${metricCard('Ventes enregistrées', number(snapshot.sales.length), 'Toutes périodes', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Crédits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste à encaisser — cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(snapshot.sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au détail ou sur commande.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>État</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistrée', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Créer une vente</button>')}</section>`;
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>État</th><th>Reçu</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistrée', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Créer une vente</button>')}</section>`;
 }
 
 function renderExpenses(snapshot) {
@@ -342,10 +418,548 @@ function renderClients(snapshot) {
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom / entreprise</th><th>Téléphone</th><th>E-mail</th><th>Commandes</th><th>Crédit restant</th><th>Canal</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Votre carnet est vide', 'Ajoutez vos clients pour retrouver leurs coordonnées lors des ventes.', '<button class="primary-button" data-action="new-client">Ajouter un client</button>')}</section>`;
 }
 
+function renderAnnualStats(snapshot) {
+  const years = [...new Set([
+    ...snapshot.bands.map((band) => (band.arrival_date || '').slice(0, 4)),
+    ...snapshot.sales.map((sale) => (sale.sale_date || '').slice(0, 4)),
+    ...snapshot.charges.map((charge) => (charge.charge_date || '').slice(0, 4)),
+  ].filter(Boolean))].sort().reverse();
+  if (!years.length) years.push(String(new Date().getFullYear()));
+  const rows = years.map((year) => {
+    const bands = snapshot.bands.filter((band) => (band.arrival_date || '').startsWith(year));
+    const sales = snapshot.sales.filter((sale) => (sale.sale_date || '').startsWith(year));
+    const charges = snapshot.charges.filter((charge) => (charge.charge_date || '').startsWith(year));
+    const logs = snapshot.logs.filter((log) => {
+      const band = snapshot.bands.find((b) => b.id === log.batch_id);
+      return band && (band.arrival_date || '').startsWith(year);
+    });
+    const initial = sum(bands, (band) => band.initial_count);
+    const deaths = sum(logs, (log) => log.mortality);
+    const sold = sum(sales, (sale) => sale.heads);
+    const revenue = sum(sales, (sale) => sale.total_amount);
+    const costs = sum(bands, (band) => bandCost(band, snapshot)) + sum(charges.filter((c) => !c.batch_id), (c) => c.amount);
+    const profit = revenue - costs;
+    return `<tr><td class="primary-cell">${esc(year)}</td><td>${number(bands.length)}</td><td>${number(initial)}</td><td>${number(deaths)}</td><td>${number(sold)}</td><td>${currency(revenue)}</td><td>${currency(costs)}</td><td class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</td></tr>`;
+  }).join('');
+  const totalRevenue = sum(snapshot.sales, (sale) => sale.total_amount);
+  const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot)) + sum(snapshot.charges.filter((c) => !c.batch_id), (c) => c.amount);
+  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan par année de votre exploitation.</p></div></div>
+    <section class="metrics-grid">
+      ${metricCard('Chiffre d’affaires total', currency(totalRevenue), 'Toutes années', 'money')}
+      ${metricCard('Dépenses totales', currency(totalCosts), 'Toutes années', 'expenses')}
+      ${metricCard('Bénéfice total', currency(totalRevenue - totalCosts), 'Toutes années', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
+      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Toutes années', 'bands')}
+    </section>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </section>`;
+}
+
+
+function strToBytes(value) {
+  const bytes = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+function normalizeAscii(value) {
+  return String(value ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE');
+}
+
+function escapePdfText(value) {
+  return normalizeAscii(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function buildReceiptPdf(sale, band) {
+  const total = Number(sale.total_amount) || 0;
+  const paid = Number(sale.paid_amount) || 0;
+  const due = total - paid;
+  const lines = [];
+  lines.push('RECU DE VENTE - VOLAILLE CHEZ TALL');
+  lines.push('');
+  lines.push(`Date : ${dateLabel(sale.sale_date)}`);
+  lines.push(`Client : ${sale.client_name || 'Vente comptoir'}`);
+  lines.push(`Telephone : ${sale.client_phone || '-'}`);
+  lines.push(`Adresse : ${sale.client_address || '-'}`);
+  lines.push(`Bande source : ${band?.name || '-'}`);
+  lines.push(`Nombre de sujets : ${number(sale.heads)}`);
+  lines.push(`Poids total : ${number(sale.total_weight_kg, 1)} kg`);
+  lines.push(`Prix par kg : ${currency(sale.price_per_kg)}`);
+  lines.push('');
+  if (due > 0) {
+    lines.push(`Montant paye : ${currency(paid)}`);
+    lines.push(`Reste a payer (reliquat) : ${currency(due)}`);
+    lines.push(`Montant global : ${currency(total)}`);
+  } else {
+    lines.push(`Montant global regle : ${currency(total)}`);
+  }
+  lines.push('');
+  lines.push('Merci pour votre achat.');
+
+  const chunks = [];
+  let totalLen = 0;
+  const add = (chunk) => {
+    const bytes = typeof chunk === 'string' ? strToBytes(chunk) : chunk;
+    chunks.push(bytes);
+    totalLen += bytes.length;
+  };
+  const objOffsets = [];
+  const mark = () => totalLen;
+
+  add('%PDF-1.4\n');
+  objOffsets[1] = mark(); add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  objOffsets[2] = mark(); add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+  let pageObj = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>';
+  if (logoJpeg) pageObj += ' /XObject << /Im1 6 0 R >>';
+  pageObj += ' >> >>\nendobj\n';
+  objOffsets[3] = mark(); add(pageObj);
+
+  const contentParts = [];
+  let y = 700;
+  if (logoJpeg) {
+    const w = logoJpeg.width;
+    const h = logoJpeg.height;
+    contentParts.push('q');
+    contentParts.push(`${w} 0 0 ${h} 50 ${y - h} cm`);
+    contentParts.push('/Im1 Do');
+    contentParts.push('Q');
+    y -= (h + 12);
+  }
+  contentParts.push('BT');
+  contentParts.push('/F1 14 Tf');
+  for (const line of lines) {
+    contentParts.push(`1 0 0 1 50 ${y} Tm`);
+    contentParts.push(`(${escapePdfText(line)}) Tj`);
+    y -= 18;
+  }
+  contentParts.push('ET');
+  const stream = contentParts.join('\n');
+  const streamBytes = strToBytes(stream);
+  objOffsets[4] = mark();
+  add(`4 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n`);
+  add(streamBytes);
+  add('\nendstream\nendobj\n');
+
+  objOffsets[5] = mark(); add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
+
+  const numObjs = logoJpeg ? 6 : 5;
+  if (logoJpeg) {
+    objOffsets[6] = mark();
+    add(`6 0 obj\n<< /Type /XObject /Subtype /Image /Width ${logoJpeg.width} /Height ${logoJpeg.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.data.length} >>\nstream\n`);
+    add(logoJpeg.data);
+    add('\nendstream\nendobj\n');
+  }
+
+  const xrefPos = totalLen;
+  add(`xref\n0 ${numObjs + 1}\n`);
+  add('0000000000 65535 f \n');
+  for (let i = 1; i <= numObjs; i++) add(`${String(objOffsets[i]).padStart(10, '0')} 00000 n \n`);
+  add(`trailer\n<< /Size ${numObjs + 1} /Root 1 0 R >>\n`);
+  add(`startxref\n${xrefPos}\n%%EOF\n`);
+
+  const finalLen = chunks.reduce((a, c) => a + c.length, 0);
+  const result = new Uint8Array(finalLen);
+  let off = 0;
+  for (const c of chunks) { result.set(c, off); off += c.length; }
+  return result;
+}
+
+function generateReceipt(sale, band) {
+  const bytes = buildReceiptPdf(sale, band);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  a.download = `recu-${safeName}-${sale.sale_date || 'vente'}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+}
+
+function downloadReceipt(saleId, button) {
+  const btn = button || document.querySelector(`button[data-sale-id="${saleId}"]`);
+  let sale = null;
+  if (btn && btn.dataset) {
+    sale = {
+      id: btn.dataset.saleId,
+      client_name: btn.dataset.clientName,
+      client_phone: btn.dataset.clientPhone,
+      client_address: btn.dataset.clientAddress,
+      sale_date: btn.dataset.saleDate,
+      heads: Number(btn.dataset.heads) || 0,
+      total_weight_kg: Number(btn.dataset.totalWeight) || 0,
+      price_per_kg: Number(btn.dataset.price) || 0,
+      total_amount: Number(btn.dataset.total) || 0,
+      paid_amount: Number(btn.dataset.paid) || 0,
+    };
+  }
+  if (!sale) {
+    const snapshot = window.snapshot || {};
+    sale = (snapshot.sales || []).find((item) => item.id === saleId);
+  }
+  if (!sale) { toast('Vente introuvable.', true); return; }
+  const bandName = btn && btn.dataset ? btn.dataset.bandName : null;
+  const snapshot = window.snapshot || {};
+  const band = bandName ? { name: bandName } : (snapshot.bands || []).find((item) => item.id === sale.batch_id);
+  generateReceipt(sale, band);
+}
+
+async function openCreditsDialog() {
+  const snapshot = await getSnapshot();
+  const outstanding = snapshot.sales.filter((sale) => Number(sale.total_amount) - Number(sale.paid_amount) > 0);
+  if (!outstanding.length) { toast('Aucun crédit client en cours.'); return; }
+  const body = `
+    <div class="dialog-form">
+      <h3>Crédits clients</h3>
+      <p>Cliquez sur un règlement pour justifier le paiement du reste.</p>
+      ${outstanding.map((sale) => {
+        const due = Number(sale.total_amount) - Number(sale.paid_amount);
+        return `<div class="cost-preview" style="display:block;margin-bottom:10px">
+          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
+          <div>Reste à payer : ${currency(due)}</div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input type="number" min="0" step="1" max="${due}" placeholder="Montant payé" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
+            <button class="primary-button" type="button" data-action="record-credit-payment" data-sale-id="${esc(sale.id)}">Enregistrer</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`;
+  setDialog('Crédits clients', 'Justifiez les paiements restants.', body);
+}
+
+async function recordCreditPayment(saleId, button) {
+  const input = document.querySelector(`[data-credit-input="${saleId}"]`);
+  const amount = Number(input && input.value) || 0;
+  if (amount <= 0) { toast('Saisissez un montant valide.', true); return; }
+  const snapshot = await getSnapshot();
+  const sale = snapshot.sales.find((item) => item.id === saleId);
+  if (!sale) { toast('Vente introuvable.', true); return; }
+  const due = Number(sale.total_amount) - Number(sale.paid_amount);
+  if (amount > due) { toast('Le montant dépasse le reste à payer.', true); return; }
+  const newPaid = Number(sale.paid_amount) + amount;
+  const updated = { ...sale, paid_amount: newPaid, payment_status: newPaid >= Number(sale.total_amount) ? 'paid' : 'partial' };
+  await saveRecord('sales', updated);
+  toast('Paiement enregistré.');
+  if (newPaid >= Number(sale.total_amount)) {
+    if (confirm('Solde réglé. Télécharger le reçu ?')) downloadReceipt(saleId);
+  }
+  closeDialog();
+  await render();
+}
+
+
+async function openBandDetail(bandId) {
+  const snapshot = await getSnapshot();
+  const band = snapshot.bands.find((item) => item.id === bandId);
+  if (!band) { toast('Bande introuvable.', true); return; }
+  const logs = snapshot.logs.filter((log) => log.batch_id === band.id).sort((a, b) => b.log_date.localeCompare(a.log_date));
+  const sales = snapshot.sales.filter((sale) => sale.batch_id === band.id).sort((a, b) => b.sale_date.localeCompare(a.sale_date));
+  const charges = snapshot.charges.filter((charge) => charge.batch_id === band.id).sort((a, b) => b.charge_date.localeCompare(a.charge_date));
+  const birds = activeBirds(band, snapshot);
+  const deaths = sum(logs, (log) => log.mortality);
+  const revenue = sum(sales, (sale) => sale.total_amount);
+  const costs = bandCost(band, snapshot);
+  const body = `
+    <div class="dialog-form">
+      <h3>${esc(band.name)}</h3>
+      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</p>
+      <div class="metrics-grid" style="margin:12px 0">
+        ${metricCard('Sujets en élevage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
+        ${metricCard('Mortalité cumulée', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
+        ${metricCard('Chiffre d’affaires', currency(revenue), `${sales.length} vente(s)`, 'money')}
+        ${metricCard('Dépenses', currency(costs), 'Coût cumulé du lot', 'expenses')}
+        ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
+      </div>
+      <h3>Relevés (${logs.length})</h3>
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
+      <h3>Ventes (${sales.length})</h3>
+      ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
+      <h3>Charges (${charges.length})</h3>
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`;
+  setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
+}
+
+function renderAnnualStats(snapshot) {
+  const years = [...new Set([
+    ...snapshot.bands.map((band) => (band.arrival_date || '').slice(0, 4)),
+    ...snapshot.sales.map((sale) => (sale.sale_date || '').slice(0, 4)),
+    ...snapshot.charges.map((charge) => (charge.charge_date || '').slice(0, 4)),
+  ].filter(Boolean))].sort().reverse();
+  if (!years.length) years.push(String(new Date().getFullYear()));
+  const rows = years.map((year) => {
+    const bands = snapshot.bands.filter((band) => (band.arrival_date || '').startsWith(year));
+    const sales = snapshot.sales.filter((sale) => (sale.sale_date || '').startsWith(year));
+    const charges = snapshot.charges.filter((charge) => (charge.charge_date || '').startsWith(year));
+    const logs = snapshot.logs.filter((log) => {
+      const band = snapshot.bands.find((b) => b.id === log.batch_id);
+      return band && (band.arrival_date || '').startsWith(year);
+    });
+    const initial = sum(bands, (band) => band.initial_count);
+    const deaths = sum(logs, (log) => log.mortality);
+    const sold = sum(sales, (sale) => sale.heads);
+    const revenue = sum(sales, (sale) => sale.total_amount);
+    const costs = sum(bands, (band) => bandCost(band, snapshot)) + sum(charges.filter((c) => !c.batch_id), (c) => c.amount);
+    const profit = revenue - costs;
+    return `<tr><td class="primary-cell">${esc(year)}</td><td>${number(bands.length)}</td><td>${number(initial)}</td><td>${number(deaths)}</td><td>${number(sold)}</td><td>${currency(revenue)}</td><td>${currency(costs)}</td><td class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</td></tr>`;
+  }).join('');
+  const totalRevenue = sum(snapshot.sales, (sale) => sale.total_amount);
+  const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot)) + sum(snapshot.charges.filter((c) => !c.batch_id), (c) => c.amount);
+  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan par année de votre exploitation.</p></div></div>
+    <section class="metrics-grid">
+      ${metricCard('Chiffre d’affaires total', currency(totalRevenue), 'Toutes années', 'money')}
+      ${metricCard('Dépenses totales', currency(totalCosts), 'Toutes années', 'expenses')}
+      ${metricCard('Bénéfice total', currency(totalRevenue - totalCosts), 'Toutes années', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
+      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Toutes années', 'bands')}
+    </section>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </section>`;
+}
+
+
+function strToBytes(value) {
+  const bytes = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+function normalizeAscii(value) {
+  return String(value ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE');
+}
+
+function escapePdfText(value) {
+  return normalizeAscii(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function buildReceiptPdf(sale, band) {
+  const total = Number(sale.total_amount) || 0;
+  const paid = Number(sale.paid_amount) || 0;
+  const due = total - paid;
+  const lines = [];
+  lines.push('RECU DE VENTE - VOLAILLE CHEZ TALL');
+  lines.push('');
+  lines.push(`Date : ${dateLabel(sale.sale_date)}`);
+  lines.push(`Client : ${sale.client_name || 'Vente comptoir'}`);
+  lines.push(`Telephone : ${sale.client_phone || '-'}`);
+  lines.push(`Adresse : ${sale.client_address || '-'}`);
+  lines.push(`Bande source : ${band?.name || '-'}`);
+  lines.push(`Nombre de sujets : ${number(sale.heads)}`);
+  lines.push(`Poids total : ${number(sale.total_weight_kg, 1)} kg`);
+  lines.push(`Prix par kg : ${currency(sale.price_per_kg)}`);
+  lines.push('');
+  if (due > 0) {
+    lines.push(`Montant paye : ${currency(paid)}`);
+    lines.push(`Reste a payer (reliquat) : ${currency(due)}`);
+    lines.push(`Montant global : ${currency(total)}`);
+  } else {
+    lines.push(`Montant global regle : ${currency(total)}`);
+  }
+  lines.push('');
+  lines.push('Merci pour votre achat.');
+
+  const chunks = [];
+  let totalLen = 0;
+  const add = (chunk) => {
+    const bytes = typeof chunk === 'string' ? strToBytes(chunk) : chunk;
+    chunks.push(bytes);
+    totalLen += bytes.length;
+  };
+  const objOffsets = [];
+  const mark = () => totalLen;
+
+  add('%PDF-1.4\n');
+  objOffsets[1] = mark(); add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  objOffsets[2] = mark(); add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+
+  let pageObj = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>';
+  if (logoJpeg) pageObj += ' /XObject << /Im1 6 0 R >>';
+  pageObj += ' >> >>\nendobj\n';
+  objOffsets[3] = mark(); add(pageObj);
+
+  const contentParts = [];
+  let y = 700;
+  if (logoJpeg) {
+    const w = logoJpeg.width;
+    const h = logoJpeg.height;
+    contentParts.push('q');
+    contentParts.push(`${w} 0 0 ${h} 50 ${y - h} cm`);
+    contentParts.push('/Im1 Do');
+    contentParts.push('Q');
+    y -= (h + 12);
+  }
+  contentParts.push('BT');
+  contentParts.push('/F1 14 Tf');
+  for (const line of lines) {
+    contentParts.push(`1 0 0 1 50 ${y} Tm`);
+    contentParts.push(`(${escapePdfText(line)}) Tj`);
+    y -= 18;
+  }
+  contentParts.push('ET');
+  const stream = contentParts.join('\n');
+  const streamBytes = strToBytes(stream);
+  objOffsets[4] = mark();
+  add(`4 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n`);
+  add(streamBytes);
+  add('\nendstream\nendobj\n');
+
+  objOffsets[5] = mark(); add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
+
+  const numObjs = logoJpeg ? 6 : 5;
+  if (logoJpeg) {
+    objOffsets[6] = mark();
+    add(`6 0 obj\n<< /Type /XObject /Subtype /Image /Width ${logoJpeg.width} /Height ${logoJpeg.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.data.length} >>\nstream\n`);
+    add(logoJpeg.data);
+    add('\nendstream\nendobj\n');
+  }
+
+  const xrefPos = totalLen;
+  add(`xref\n0 ${numObjs + 1}\n`);
+  add('0000000000 65535 f \n');
+  for (let i = 1; i <= numObjs; i++) add(`${String(objOffsets[i]).padStart(10, '0')} 00000 n \n`);
+  add(`trailer\n<< /Size ${numObjs + 1} /Root 1 0 R >>\n`);
+  add(`startxref\n${xrefPos}\n%%EOF\n`);
+
+  const finalLen = chunks.reduce((a, c) => a + c.length, 0);
+  const result = new Uint8Array(finalLen);
+  let off = 0;
+  for (const c of chunks) { result.set(c, off); off += c.length; }
+  return result;
+}
+
+function generateReceipt(sale, band) {
+  const bytes = buildReceiptPdf(sale, band);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  a.download = `recu-${safeName}-${sale.sale_date || 'vente'}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+}
+
+function downloadReceipt(saleId, button) {
+  const btn = button || document.querySelector(`button[data-sale-id="${saleId}"]`);
+  let sale = null;
+  if (btn && btn.dataset) {
+    sale = {
+      id: btn.dataset.saleId,
+      client_name: btn.dataset.clientName,
+      client_phone: btn.dataset.clientPhone,
+      client_address: btn.dataset.clientAddress,
+      sale_date: btn.dataset.saleDate,
+      heads: Number(btn.dataset.heads) || 0,
+      total_weight_kg: Number(btn.dataset.totalWeight) || 0,
+      price_per_kg: Number(btn.dataset.price) || 0,
+      total_amount: Number(btn.dataset.total) || 0,
+      paid_amount: Number(btn.dataset.paid) || 0,
+    };
+  }
+  if (!sale) {
+    const snapshot = window.snapshot || {};
+    sale = (snapshot.sales || []).find((item) => item.id === saleId);
+  }
+  if (!sale) { toast('Vente introuvable.', true); return; }
+  const bandName = btn && btn.dataset ? btn.dataset.bandName : null;
+  const snapshot = window.snapshot || {};
+  const band = bandName ? { name: bandName } : (snapshot.bands || []).find((item) => item.id === sale.batch_id);
+  generateReceipt(sale, band);
+}
+
+async function openCreditsDialog() {
+  const snapshot = await getSnapshot();
+  const outstanding = snapshot.sales.filter((sale) => Number(sale.total_amount) - Number(sale.paid_amount) > 0);
+  if (!outstanding.length) { toast('Aucun crédit client en cours.'); return; }
+  const body = `
+    <div class="dialog-form">
+      <h3>Crédits clients</h3>
+      <p>Cliquez sur un règlement pour justifier le paiement du reste.</p>
+      ${outstanding.map((sale) => {
+        const due = Number(sale.total_amount) - Number(sale.paid_amount);
+        return `<div class="cost-preview" style="display:block;margin-bottom:10px">
+          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
+          <div>Reste à payer : ${currency(due)}</div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input type="number" min="0" step="1" max="${due}" placeholder="Montant payé" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
+            <button class="primary-button" type="button" data-action="record-credit-payment" data-sale-id="${esc(sale.id)}">Enregistrer</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`;
+  setDialog('Crédits clients', 'Justifiez les paiements restants.', body);
+}
+
+async function recordCreditPayment(saleId, button) {
+  const input = document.querySelector(`[data-credit-input="${saleId}"]`);
+  const amount = Number(input && input.value) || 0;
+  if (amount <= 0) { toast('Saisissez un montant valide.', true); return; }
+  const snapshot = await getSnapshot();
+  const sale = snapshot.sales.find((item) => item.id === saleId);
+  if (!sale) { toast('Vente introuvable.', true); return; }
+  const due = Number(sale.total_amount) - Number(sale.paid_amount);
+  if (amount > due) { toast('Le montant dépasse le reste à payer.', true); return; }
+  const newPaid = Number(sale.paid_amount) + amount;
+  const updated = { ...sale, paid_amount: newPaid, payment_status: newPaid >= Number(sale.total_amount) ? 'paid' : 'partial' };
+  await saveRecord('sales', updated);
+  toast('Paiement enregistré.');
+  if (newPaid >= Number(sale.total_amount)) {
+    if (confirm('Solde réglé. Télécharger le reçu ?')) downloadReceipt(saleId);
+  }
+  closeDialog();
+  await render();
+}
+
+
+async function openBandDetail(bandId) {
+  const snapshot = await getSnapshot();
+  const band = snapshot.bands.find((item) => item.id === bandId);
+  if (!band) { toast('Bande introuvable.', true); return; }
+  const logs = snapshot.logs.filter((log) => log.batch_id === band.id).sort((a, b) => b.log_date.localeCompare(a.log_date));
+  const sales = snapshot.sales.filter((sale) => sale.batch_id === band.id).sort((a, b) => b.sale_date.localeCompare(a.sale_date));
+  const charges = snapshot.charges.filter((charge) => charge.batch_id === band.id).sort((a, b) => b.charge_date.localeCompare(a.charge_date));
+  const birds = activeBirds(band, snapshot);
+  const deaths = sum(logs, (log) => log.mortality);
+  const revenue = sum(sales, (sale) => sale.total_amount);
+  const costs = bandCost(band, snapshot);
+  const body = `
+    <div class="dialog-form">
+      <h3>${esc(band.name)}</h3>
+      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</p>
+      <div class="metrics-grid" style="margin:12px 0">
+        ${metricCard('Sujets en élevage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
+        ${metricCard('Mortalité cumulée', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
+        ${metricCard('Chiffre d’affaires', currency(revenue), `${sales.length} vente(s)`, 'money')}
+        ${metricCard('Dépenses', currency(costs), 'Coût cumulé du lot', 'expenses')}
+        ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
+      </div>
+      <h3>Relevés (${logs.length})</h3>
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
+      <h3>Ventes (${sales.length})</h3>
+      ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
+      <h3>Charges (${charges.length})</h3>
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`;
+  setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
+}
+
 async function render() {
   const snapshot = await getSnapshot();
   window.snapshot = snapshot;
-  const renderers = { dashboard: renderDashboard, bands: renderBands, daily: renderDaily, stock: renderStock, sales: renderSales, expenses: renderExpenses, clients: renderClients };
+  const renderers = { dashboard: renderDashboard, bands: renderBands, daily: renderDaily, sales: renderSales, expenses: renderExpenses, annual: renderAnnualStats };
   $('#page-container').innerHTML = renderers[currentPage](snapshot);
   $('#page-container').setAttribute('aria-labelledby', `tab-${currentPage}`);
   $('#page-title').textContent = PAGE_LABELS[currentPage];
@@ -378,22 +992,27 @@ async function setPage(page, { pushHistory = false, focusTab = false, scrollToTo
   if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function openBandForm() {
-  setDialog('Créer une bande', 'Renseignez le lot et le coût d’acquisition à la mise en place.', `
-    <form class="dialog-form" id="band-form"><div class="form-grid">
-      <div class="field"><label for="band-name">Nom de la bande *</label><input id="band-name" name="name" required maxlength="80" placeholder="Ex. Bande Mars — bâtiment 1" /></div>
-      <div class="field"><label for="band-strain">Souche</label><select id="band-strain" name="strain"><option>Ross 308</option><option>Cobb 500</option><option>Hubbard</option><option>Autre</option></select></div>
-      <div class="field"><label for="band-date">Date de mise en place *</label><input id="band-date" name="arrival_date" type="date" value="${today()}" required /></div>
-      <div class="field"><label for="band-count-input">Nombre de poussins *</label><input id="band-count-input" name="initial_count" type="number" inputmode="numeric" min="1" step="1" required placeholder="Ex. 1 000" /></div>
-      <div class="field"><label for="band-supplier">Fournisseur</label><input id="band-supplier" name="supplier" maxlength="100" placeholder="Couvoir / fournisseur" /></div>
-      <div class="field"><label for="band-weight">Poids cible (kg / sujet)</label><input id="band-weight" name="target_weight_kg" type="number" inputmode="decimal" min="0" step="0.01" value="2.2" /></div>
-      <div class="field"><label for="band-age">Cycle cible (jours)</label><input id="band-age" name="target_age_days" type="number" inputmode="numeric" min="1" max="120" step="1" value="42" /></div>
-      <div class="field"><label for="chick-price">Prix unitaire du poussin (FCFA) *</label><input id="chick-price" name="chick_unit_cost" type="number" inputmode="decimal" min="0" step="1" required value="0" /></div>
-      <div class="field"><label for="transport-cost">Transport initial (FCFA)</label><input id="transport-cost" name="transport_cost" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
+async function openBandForm(bandId = null) {
+  let band = null;
+  if (bandId) {
+    band = (await readAll('bands')).find((item) => item.id === bandId);
+  }
+  const isEdit = Boolean(band);
+  setDialog(isEdit ? 'Modifier la bande' : 'Créer une bande', 'Renseignez le lot et le coût d’acquisition à la mise en place.', `
+    <form class="dialog-form" id="band-form" data-band-id="${esc(band ? band.id : '')}"><div class="form-grid">
+      <input type="hidden" name="id" value="${esc(band ? band.id : '')}" />
+      <div class="field"><label for="band-name">Nom de la bande *</label><input id="band-name" name="name" required maxlength="80" placeholder="Ex. Bande Mars — bâtiment 1" value="${esc(band ? band.name : '')}" /></div>
+      <div class="field"><label for="band-strain">Souche</label><select id="band-strain" name="strain"><option ${band && band.strain==='Ross 308' ? 'selected' : ''}>Ross 308</option><option ${band && band.strain==='Cobb 500' ? 'selected' : ''}>Cobb 500</option><option ${band && band.strain==='Hubbard' ? 'selected' : ''}>Hubbard</option><option ${band && band.strain==='Autre' ? 'selected' : ''}>Autre</option></select></div>
+      <div class="field"><label for="band-date">Date de mise en place *</label><input id="band-date" name="arrival_date" type="date" value="${esc((band && band.arrival_date) || today())}" required /></div>
+      <div class="field"><label for="band-count-input">Nombre de poussins *</label><input id="band-count-input" name="initial_count" type="number" inputmode="numeric" min="1" step="1" required placeholder="Ex. 1 000" value="${esc(band ? band.initial_count : '')}" /></div>
+      <div class="field"><label for="band-supplier">Fournisseur</label><input id="band-supplier" name="supplier" maxlength="100" placeholder="Couvoir / fournisseur" value="${esc(band ? band.supplier : '')}" /></div>
+      <div class="field"><label for="band-weight">Poids cible (kg / sujet)</label><input id="band-weight" name="target_weight_kg" type="number" inputmode="decimal" min="0" step="0.01" value="${esc((band && band.target_weight_kg) || '2.2')}" /></div>
+      <div class="field"><label for="band-age">Cycle cible (jours)</label><input id="band-age" name="target_age_days" type="number" inputmode="numeric" min="1" max="120" step="1" value="${esc((band && band.target_age_days) || '42')}" /></div>
+      <div class="field"><label for="chick-price">Prix unitaire du poussin (FCFA) *</label><input id="chick-price" name="chick_unit_cost" type="number" inputmode="decimal" min="0" step="1" required value="${esc((band && band.chick_unit_cost) || '0')}" /></div>
+      <div class="field"><label for="transport-cost">Transport initial (FCFA)</label><input id="transport-cost" name="transport_cost" type="number" inputmode="decimal" min="0" step="1" value="${esc((band && band.transport_cost) || '0')}" /></div>
       <div class="cost-preview"><span>Coût initial (poussins + transport)</span><strong id="initial-cost-preview">0 FCFA</strong></div>
       <div class="field full"><span class="field-hint">Le coût total des poussins est calculé automatiquement : effectif × prix unitaire. Le transport est comptabilisé séparément dans le coût du lot.</span></div>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer la bande</button></div></form>`);
-
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">${isEdit ? 'Enregistrer les modifications' : 'Enregistrer la bande'}</button></div></form>`);
   const updatePreview = () => {
     const count = Number($('#band-count-input').value) || 0;
     const price = Number($('#chick-price').value) || 0;
@@ -401,29 +1020,20 @@ function openBandForm() {
     $('#initial-cost-preview').textContent = currency(count * price + transport);
   };
   ['#band-count-input', '#chick-price', '#transport-cost'].forEach((selector) => $(selector).addEventListener('input', updatePreview));
+  updatePreview();
 }
 
 async function openDailyForm() {
   const snapshot = await getSnapshot();
   const bands = snapshot.bands.filter((band) => band.status !== 'closed');
   if (!bands.length) { toast('Créez d’abord une bande avant de saisir un relevé.', true); return; }
-  const items = snapshot.items;
   setDialog('Saisie quotidienne', 'Les données sont enregistrées sur cet appareil, même sans réseau.', `
     <form class="dialog-form" id="daily-form"><div class="form-grid">
       <div class="field"><label for="log-band">Bande *</label><select id="log-band" name="batch_id" required>${batchSelect(bands)}</select></div>
       <div class="field"><label for="log-date">Date du relevé *</label><input id="log-date" name="log_date" type="date" value="${today()}" max="${today()}" required /></div>
       <div class="field"><label for="log-mortality">Mortalité du jour (sujets)</label><input id="log-mortality" name="mortality" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
       <div class="field"><label for="log-culls">Tri / réformes (sujets)</label><input id="log-culls" name="culls" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="log-starter">Aliment démarrage (kg)</label><input id="log-starter" name="feed_starter_kg" type="number" inputmode="decimal" min="0" step="0.1" value="0" /></div>
-      <div class="field"><label for="log-grower">Aliment croissance (kg)</label><input id="log-grower" name="feed_grower_kg" type="number" inputmode="decimal" min="0" step="0.1" value="0" /></div>
-      <div class="field"><label for="log-finisher">Aliment finition (kg)</label><input id="log-finisher" name="feed_finisher_kg" type="number" inputmode="decimal" min="0" step="0.1" value="0" /></div>
-      <div class="field"><label for="log-water">Eau consommée (litres)</label><input id="log-water" name="water_liters" type="number" inputmode="decimal" min="0" step="0.1" value="0" /></div>
-      <div class="field"><label for="log-weight">Poids moyen mesuré (kg / sujet)</label><input id="log-weight" name="avg_weight_kg" type="number" inputmode="decimal" min="0" step="0.001" placeholder="Facultatif" /></div>
-      <div class="field"><label for="log-health-cost">Soins / prophylaxie (FCFA)</label><input id="log-health-cost" name="health_cost" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="log-other-cost">Autres coûts du jour (FCFA)</label><input id="log-other-cost" name="other_cost" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="log-treatment">Traitement / observation</label><input id="log-treatment" name="treatment" maxlength="200" placeholder="Vaccin, vitamines, observation…" /></div>
-      <div class="field full"><label for="log-note">Note</label><textarea id="log-note" name="note" maxlength="1000" placeholder="Observation du bâtiment, température, incident…"></textarea></div>
-      <div class="field full"><span class="field-hint">${items.length ? 'Les aliments consommés doivent être inventoriés en kg ; le stock et le coût moyen seront déduits automatiquement.' : 'Ajoutez les aliments dans Stocks, en kg, avant de saisir leur consommation afin de calculer le coût et l’indice de consommation.'}</span></div>
+      <div class="field full"><label for="log-note">Note ou autre observation</label><textarea id="log-note" name="note" maxlength="1000" placeholder="Observation du bâtiment, température, incident…"></textarea></div>
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer le relevé</button></div></form>`);
 }
 
@@ -449,7 +1059,9 @@ async function openSaleForm() {
     <form class="dialog-form" id="sale-form"><div class="form-grid">
       <div class="field"><label for="sale-band">Bande source *</label><select id="sale-band" name="batch_id" required>${batchSelect(bands)}</select></div>
       <div class="field"><label for="sale-date">Date de vente *</label><input id="sale-date" name="sale_date" type="date" value="${today()}" required /></div>
-      <div class="field"><label for="sale-client">Client</label><select id="sale-client" name="client_id"><option value="">Vente comptoir / client ponctuel</option>${snapshot.clients.map((client) => `<option value="${esc(client.id)}">${esc(client.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="sale-client-name">Nom du client *</label><input id="sale-client-name" name="client_name" required maxlength="120" placeholder="Ex. Restaurant Le Marché" /></div>
+      <div class="field"><label for="sale-client-phone">Numéro de téléphone</label><input id="sale-client-phone" name="client_phone" type="tel" maxlength="30" placeholder="+221…" /></div>
+      <div class="field full"><label for="sale-client-address">Adresse</label><input id="sale-client-address" name="client_address" maxlength="200" placeholder="Adresse du client" /></div>
       <div class="field"><label for="sale-heads">Nombre de sujets *</label><input id="sale-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required /></div>
       <div class="field"><label for="sale-weight">Poids moyen unitaire (kg) *</label><input id="sale-weight" name="unit_weight_kg" type="number" inputmode="decimal" min="0.01" step="0.01" value="2" required /></div>
       <div class="field"><label for="sale-price">Prix par kg vif (FCFA) *</label><input id="sale-price" name="price_per_kg" type="number" inputmode="decimal" min="0" step="1" required /></div>
@@ -489,6 +1101,7 @@ function openClientForm() {
 
 async function handleSubmit(event) {
   const form = event.target;
+  const formId = form && typeof form.getAttribute === 'function' ? form.getAttribute('id') : form && form.id;
   if (!(form instanceof HTMLFormElement)) return;
   event.preventDefault();
   const values = Object.fromEntries(new FormData(form).entries());
@@ -498,13 +1111,18 @@ async function handleSubmit(event) {
   }
   const base = { id: uid(), organization_id: await readMeta('organization_id'), created_at: new Date().toISOString() };
 
-  if (form.id === 'band-form') {
+  if (formId === 'band-form') {
+    const existing = values.id ? (await readAll('bands')).find((item) => item.id === values.id) : null;
+    const bandValues = { ...values };
+    delete bandValues.id;
     const record = {
-      ...base, ...values, chick_total_cost: values.initial_count * values.chick_unit_cost,
-      status: 'active', target_age_days: 42,
+      ...base, ...bandValues, id: values.id || base.id,
+      chick_total_cost: values.initial_count * values.chick_unit_cost,
+      status: existing ? existing.status : 'active', target_age_days: values.target_age_days || 42,
+      created_at: existing ? existing.created_at : base.created_at,
     };
     await saveRecord('bands', record);
-  } else if (form.id === 'daily-form') {
+  } else if (formId === 'daily-form') {
     const snapshot = await getSnapshot();
     const band = snapshot.bands.find((item) => item.id === values.batch_id);
     if (!band) throw new Error('La bande sélectionnée n’existe plus.');
@@ -553,7 +1171,7 @@ async function handleSubmit(event) {
       });
     }
     await saveRecords(entries);
-  } else if (form.id === 'stock-form') {
+  } else if (formId === 'stock-form') {
     const existing = (await readAll('inventory_items')).find((item) => item.name.toLowerCase() === values.name.trim().toLowerCase() && item.unit === values.unit);
     const costIncludingTransport = values.quantity ? ((values.quantity * values.unit_cost + values.transport_cost) / values.quantity) : 0;
     const totalQuantity = Number(existing?.quantity || 0) + values.quantity;
@@ -570,7 +1188,7 @@ async function handleSubmit(event) {
       ...base, item_id: item.id, batch_id: null, movement_type: 'purchase', quantity_delta: values.quantity,
       unit_cost: values.unit_cost, transport_cost: values.transport_cost, movement_date: values.movement_date,
     });
-  } else if (form.id === 'sale-form') {
+  } else if (formId === 'sale-form') {
     const snapshot = await getSnapshot();
     const band = snapshot.bands.find((item) => item.id === values.batch_id);
     if (!band || values.heads > activeBirds(band, snapshot)) throw new Error(`Quantité indisponible. ${band ? `${activeBirds(band, snapshot)} sujets` : 'Vérifiez la bande'} disponibles.`);
@@ -738,13 +1356,31 @@ async function openSettings() {
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button>${connected ? '<button class="secondary-button danger-button" type="button" data-action="disconnect">Déconnecter</button>' : ''}<button class="primary-button" type="submit">${connected ? 'Reconnecter le compte' : 'Connecter et synchroniser'}</button></div></form>`);
 }
 
-async function handleAction(action) {
+async function handleAction(action, button = null) {
   if (action === 'new-band') openBandForm();
+  else if (action === 'edit-band') { if (button?.dataset?.bandId) await openBandForm(button.dataset.bandId); }
+  else if (action === 'delete-band') {
+    const id = button?.dataset?.bandId;
+    if (id && confirm('Supprimer cette bande ?')) {
+      await deleteRecord('bands', id);
+      toast('Bande supprimée.');
+      await render();
+    }
+  }
+  else if (action === 'delete-band-history') {
+    const id = button?.dataset?.bandId;
+    if (id && confirm('Supprimer tout l’historique (relevés) de cette bande ?')) {
+      await deleteLogsForBand(id);
+      toast('Historique supprimé.');
+      await render();
+    }
+  }
+  else if (action === 'show-credits') await openCreditsDialog();
+  else if (action === 'download-receipt') { if (button?.dataset?.saleId) downloadReceipt(button.dataset.saleId, button); }
+  else if (action === 'record-credit-payment') { if (button?.dataset?.saleId) await recordCreditPayment(button.dataset.saleId, button); }
   else if (action === 'new-daily') await openDailyForm();
-  else if (action === 'new-stock') openStockForm();
   else if (action === 'new-sale') await openSaleForm();
   else if (action === 'new-charge') await openChargeForm();
-  else if (action === 'new-client') openClientForm();
   else if (action === 'settings') await openSettings();
   else if (action === 'disconnect') {
     sessionStorage.removeItem('poulet-access-token');
@@ -755,13 +1391,18 @@ async function handleAction(action) {
 }
 
 async function routeEvent(event) {
+  const bandDetail = event.target.closest('[data-band-detail]');
+  if (bandDetail && !event.target.closest('button')) {
+    await openBandDetail(bandDetail.dataset.bandDetail);
+    return;
+  }
   const pageButton = event.target.closest('[data-page]');
   if (pageButton) {
     await setPage(pageButton.dataset.page, { pushHistory: true, scrollToTop: true });
     return;
   }
   const actionButton = event.target.closest('[data-action]');
-  if (actionButton) { await handleAction(actionButton.dataset.action); return; }
+  if (actionButton) { await handleAction(actionButton.dataset.action, actionButton); return; }
   if (event.target.closest('[data-close-dialog]')) closeDialog();
 }
 
@@ -783,6 +1424,8 @@ function handleTabKeydown(event) {
 
 async function main() {
   db = await openDatabase();
+  await preloadLogo();
+  await preloadLogo();
   document.querySelectorAll('[data-icon]').forEach((node) => {
     if (ICONS[node.dataset.icon]) node.innerHTML = icon(node.dataset.icon);
   });
