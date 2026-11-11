@@ -1134,7 +1134,14 @@ async function main() {
   if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
   await setPage(initialPage);
   refreshOrderBadge();
-  if (supabaseReady()) publishStock({ silent: true }).catch((error) => console.error(error));
+  if (supabaseReady()) {
+    getSnapshot()
+      .then((snapshot) => {
+        if (!snapshot.bands.length) return null;
+        return publishStock({ silent: true });
+      })
+      .catch((error) => console.error(error));
+  }
 }
 
 main().catch((error) => {
