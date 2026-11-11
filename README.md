@@ -1,6 +1,6 @@
 # Volaille chez TALL — Gestion avicole
 
-Application web progressive (PWA) pour l’élevage et la commercialisation de poulets de chair. Elle fonctionne sur ordinateur, tablette et téléphone, sans compte ni serveur : toutes les données sont enregistrées dans le navigateur (IndexedDB) et restent disponibles hors ligne.
+Application web progressive (PWA) pour l’élevage et la commercialisation de poulets de chair. Elle fonctionne sur ordinateur, tablette et téléphone. Un compte personnel (email ou téléphone + mot de passe) est obligatoire : bandes, relevés, ventes, charges et paramètres sont enregistrés dans Supabase et **synchronisés sur tous les appareils connectés**.
 
 ## Application en ligne
 
@@ -10,7 +10,7 @@ https://volailletall01-glitch.github.io/volaille-chez-tall-app/
 Déploiement continu Vercel (dépôt `main`, redéploiement automatique à chaque push) :
 https://volaille-chez-tall.vercel.app
 
-> Les données sont propres à chaque adresse. Un appareil qui utilise déjà l’adresse Vercel continue d’y voir ses données ; une nouvelle adresse démarre avec une base vide.
+> Les données sont désormais liées au **compte** et non plus à l’adresse : connectez-vous avec le même email/téléphone sur GitHub Pages ou Vercel pour retrouver exactement les mêmes bandes, ventes et charges.
 
 Le code est hébergé sur GitHub : https://github.com/volailletall01-glitch/volaille-chez-tall-app
 
@@ -28,6 +28,12 @@ py -m http.server 8080
 Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en cache après le premier chargement.
 
 ## Fonctions
+
+### Connexion et synchronisation
+- **Écran d’accueil animé** avec le logo de l’exploitation, avant toute utilisation de l’application.
+- **Inscription** et **connexion** par email **ou** numéro de téléphone, avec mot de passe (6 caractères minimum).
+- Les données sont stockées sur le compte Supabase : à la reconnexion sur un autre appareil, l’historique complet est retrouvé automatiquement.
+- Bouton **Mon compte** (en bas de la barre latérale) : profil, nombre d’enregistrements, synchronisation manuelle et déconnexion.
 
 ### Vue d’ensemble
 - Indicateurs **par bande** : sujets en élevage, mortalité cumulée, chiffre d’affaires, dépenses et bénéfice.
@@ -47,6 +53,8 @@ Un relevé par bande et par date, limité à l’essentiel :
 - mortalité du jour ;
 - tri / réformes ;
 - note ou observation.
+
+**Suppression d’un relevé** : le bouton ✕ retire immédiatement la mortalité et le tri des totaux de la bande (sujets en élevage, taux de mortalité, indicateurs). Le recalcul est instantané, sans étape supplémentaire.
 
 ### Ventes
 - Vente par bande avec nom, téléphone et adresse du client.
@@ -68,6 +76,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 ### Charges
 - Dépense libre ou affectée à une bande.
 - Une charge affectée à une bande entre dans le coût et le bénéfice de cette bande.
+- **Suppression d’une charge** : le bouton ✕ la retire immédiatement des dépenses, du coût de la bande et du bénéfice. Les totaux sont recalculés sur-le-champ.
 
 ### Statistiques annuelles
 - Synthèse par année : bandes, ventes, revenus, charges, bénéfice, mortalité.
@@ -82,8 +91,9 @@ POULET/
 ├── commander.html             # Page publique de commande client
 ├── commander.js               # Stock temps réel, formulaire, envoi
 ├── supabase-config.js         # URL + clé publique Supabase
-├── supabase/commandes.sql     # Tables, sécurité (RLS) et droits
-├── app.js                     # Interface, IndexedDB, calculs, reçus PDF
+├── supabase/commandes.sql     # Commandes publiques, stock publié (RLS)
+├── supabase/auth-sync.sql     # Compte, bandes, relevés, ventes, charges (RLS)
+├── app.js                     # Interface, auth, synchronisation, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
 ├── sw.js                      # Cache hors ligne (APP_SHELL)
@@ -93,15 +103,18 @@ POULET/
 
 ## Données et sauvegarde
 
-- Bandes, relevés, ventes, charges et clients sont stockés localement dans IndexedDB, par navigateur et par adresse (origine). Ils ne sont pas partagés entre appareils.
-- Vider les données du site ou changer d’adresse (par exemple passer de GitHub Pages à Vercel) revient à repartir d’une base vide pour ces données locales.
-- **Commandes clients** : seules les commandes et le stock publié passent par Supabase, afin que le lien public fonctionne depuis n’importe quel appareil. La clé utilisée dans `supabase-config.js` est publique et limitée par les règles de sécurité (RLS) : elle ne peut que créer une commande, lire les commandes reçues, les passer à « Validée » ou « Refusée », supprimer les commandes refusées (corbeille) et publier le stock. Il n’y a volontairement plus de compte ni de mot de passe : toute personne qui ouvre l’application peut traiter les commandes, donc gardez l’adresse privée.
+- Bandes, relevés, ventes, charges, profil et paramètres sont stockés dans **Supabase**, rattachés au compte (`user_id`). Les règles **RLS** empêchent tout autre utilisateur d’y accéder.
+- La première connexion sur un appareil qui possède encore d’anciennes données locales (IndexedDB) les transfère une seule fois vers le compte, si celui-ci est vide. L’IndexedDB n’est plus utilisée ensuite.
+- Une connexion Internet est nécessaire pour lire et enregistrer les données. L’interface reste mise en cache par le service worker, mais les données métier ne sont pas mises en file hors ligne.
+- **Commandes clients** : les commandes et le stock publié restent dans des tables publiques Supabase, afin que le lien de commande fonctionne sans compte. La clé `supabase-config.js` est publique et limitée par RLS : création de commande, lecture des commandes reçues, validation/refus, corbeille et publication du stock.
 
 ## Mise en place de Supabase (une seule fois)
 
-1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor** (tables, règles RLS, droits pour la clé publique).
-2. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-3. Dans l’application, ouvrir **Mes Commandes**, puis **Publier le stock** pour rendre le stock visible sur la page publique.
+1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor** (commandes publiques, stock, règles RLS).
+2. Exécuter `supabase/auth-sync.sql` dans le même éditeur (comptes, profils, bandes, relevés, ventes, charges, paramètres + RLS).
+3. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
+4. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+5. Dans l’application, créer un compte puis ouvrir **Mes Commandes → Publier le stock** pour rendre le stock visible sur la page publique.
 
 ## Installer
 
@@ -112,11 +125,11 @@ POULET/
 
 Après chaque modification de `app.js`, `styles.css`, `index.html` ou des icônes :
 
-1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v38`) pour forcer la mise à jour du cache.
+1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v39`) pour forcer la mise à jour du cache.
 2. Rechargez l’application en désinscrivant le service worker ou en vidant le cache du site.
 
 ## Limites connues
 
 - Une saisie quotidienne par bande et par date.
 - Les ventes portent sur des poulets vivants ; aucun abattoir, lot transformé, SMS/WhatsApp ou Mobile Money n’est connecté.
-- Les données locales ne remplacent pas une sauvegarde : exportez ou conservez un profil de navigateur dédié.
+- Les données sont synchronisées avec Supabase : conservez l’accès à votre compte (email/téléphone et mot de passe) pour les retrouver sur un nouvel appareil.

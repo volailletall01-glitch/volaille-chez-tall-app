@@ -15,6 +15,55 @@
     <title>Volaille chez TALL — Gestion avicole</title>
   </head>
   <body>
+    <div class="auth-screen" id="auth-screen">
+      <div class="auth-ambience" aria-hidden="true">
+        <span class="auth-glow auth-glow-a"></span>
+        <span class="auth-glow auth-glow-b"></span>
+        <span class="auth-grid"></span>
+      </div>
+      <main class="auth-card">
+        <div class="auth-brand">
+          <div class="auth-emblem">
+            <span class="auth-ring" aria-hidden="true"></span>
+            <span class="auth-ring auth-ring-2" aria-hidden="true"></span>
+            <span class="auth-logo-glow" aria-hidden="true"></span>
+            <img class="auth-logo" src="./icons/volaille-chez-tall-logo.png" alt="Logo Volaille chez TALL" width="132" height="132" />
+          </div>
+          <p class="auth-eyebrow">Élevage avicole · Bamako</p>
+          <h1>Volaille chez TALL</h1>
+          <p class="auth-tagline">Vos bandes, vos ventes et vos charges, toujours avec vous.</p>
+        </div>
+        <div class="auth-tabs" role="tablist" aria-label="Connexion ou création de compte">
+          <button class="auth-tab active" type="button" role="tab" aria-selected="true" data-auth-tab="signin">Connexion</button>
+          <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-tab="signup">Créer un compte</button>
+        </div>
+        <form class="auth-form" id="auth-form" novalidate>
+          <div class="auth-field">
+            <label for="auth-identifier">Email ou téléphone</label>
+            <input id="auth-identifier" name="identifier" type="text" inputmode="email" autocomplete="username" placeholder="vous@exemple.com ou 78 00 00 00" required />
+          </div>
+          <div class="auth-field" data-signup-only hidden>
+            <label for="auth-name">Nom de l’exploitation (optionnel)</label>
+            <input id="auth-name" name="display_name" type="text" autocomplete="organization" maxlength="80" placeholder="Ex. Ferme TALL" />
+          </div>
+          <div class="auth-field">
+            <label for="auth-password">Mot de passe</label>
+            <div class="auth-password">
+              <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" placeholder="6 caractères minimum" required />
+              <button type="button" id="auth-toggle-password" aria-label="Afficher le mot de passe">Afficher</button>
+            </div>
+          </div>
+          <p class="auth-error" id="auth-error" role="alert" hidden></p>
+          <button class="auth-submit" id="auth-submit" type="submit">
+            <span class="auth-spinner" id="auth-spinner" hidden aria-hidden="true"></span>
+            <span id="auth-submit-label">Se connecter</span>
+          </button>
+          <p class="auth-hint" id="auth-hint">Retrouvez vos bandes, ventes et charges sur ordinateur comme sur téléphone.</p>
+        </form>
+        <p class="auth-foot">Données privées et sécurisées · synchronisation automatique</p>
+      </main>
+    </div>
+
     <div class="app-shell">
       <aside class="sidebar" aria-label="Navigation principale">
         <a class="brand" href="#dashboard" aria-label="Volaille chez TALL, accueil">
@@ -33,6 +82,11 @@
           <button class="nav-item" id="tab-annual" role="tab" aria-selected="false" aria-controls="page-container" tabindex="-1" data-page="annual"><span class="nav-icon" data-icon="stats"></span><span>Statistiques annuelles</span></button>
         </nav>
         <div class="sidebar-bottom">
+          <button class="profile-button" type="button" data-action="account" title="Mon compte et synchronisation">
+            <span class="avatar" id="profile-avatar">VT</span>
+            <span><strong id="profile-name">Mon compte</strong><small id="profile-email">Synchronisation</small></span>
+            <span class="profile-chevron" aria-hidden="true">⋯</span>
+          </button>
           <div class="offline-card">
             <span class="offline-dot"></span>
             <div><strong id="connection-label">Mode hors ligne prêt</strong><small id="sync-label">Données sur cet appareil</small></div>

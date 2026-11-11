@@ -98,7 +98,7 @@ function openDatabase() {
   });
 }
 
-function readAll(storeName) {
+function localReadAll(storeName) {
   return new Promise((resolve, reject) => {
     const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
     request.onsuccess = () => resolve(request.result || []);
@@ -106,7 +106,7 @@ function readAll(storeName) {
   });
 }
 
-function readMeta(key) {
+function localReadMeta(key) {
   return new Promise((resolve, reject) => {
     const request = db.transaction('meta', 'readonly').objectStore('meta').get(key);
     request.onsuccess = () => resolve(request.result?.value ?? null);
@@ -114,7 +114,7 @@ function readMeta(key) {
   });
 }
 
-function writeMeta(key, value) {
+function localWriteMeta(key, value) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('meta', 'readwrite');
     transaction.objectStore('meta').put({ id: key, value });
@@ -123,7 +123,7 @@ function writeMeta(key, value) {
   });
 }
 
-async function deleteRecord(storeName, id) {
+async function localDeleteRecord(storeName, id) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     transaction.objectStore(storeName).delete(id);
@@ -132,7 +132,7 @@ async function deleteRecord(storeName, id) {
   });
 }
 
-async function deleteRecords(storeName, ids) {
+async function localDeleteRecords(storeName, ids) {
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return;
   return new Promise((resolve, reject) => {
@@ -144,8 +144,8 @@ async function deleteRecords(storeName, ids) {
   });
 }
 
-async function deleteLogsForBand(bandId) {
-  const logs = (await readAll('daily_logs')).filter((log) => log.batch_id === bandId);
+async function localDeleteLogsForBand(bandId) {
+  const logs = (await localReadAll('daily_logs')).filter((log) => log.batch_id === bandId);
   if (!logs.length) return;
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('daily_logs', 'readwrite');
@@ -156,7 +156,7 @@ async function deleteLogsForBand(bandId) {
   });
 }
 
-async function saveRecords(entries) {
+async function localSaveRecords(entries) {
   const timestamp = new Date().toISOString();
   const prepared = entries.map(({ store, record }) => ({
     store, record: { ...record, updated_at: timestamp },
@@ -173,18 +173,373 @@ async function saveRecords(entries) {
   });
 }
 
+async function localSaveRecord(storeName, record) {
+  const [saved] = await localSaveRecords([{ store: storeName, record }]);
+  return saved;
+}
+
+async function localGetSnapshot() {
+  const [bands, logs, items, movements, sales, charges, clients] = await Promise.all([
+    localReadAll('bands'), localReadAll('daily_logs'), localReadAll('inventory_items'), localReadAll('inventory_movements'),
+    localReadAll('sales'), localReadAll('charges'), localReadAll('clients'),
+  ]);
+  return { bands, logs, items, movements, sales, charges, clients };
+}
+
+/* ---------------------------------------------------------------------------
+   Authentification Supabase + synchronisation cloud
+   --------------------------------------------------------------------------- */
+const AUTH_STORAGE_KEY = 'volaille-chez-tall-session-v1';
+const PHONE_DOMAIN = 'phone.volaille-cheztall.app';
+const REMOTE_SCHEMA = {
+  bands: ['id', 'organization_id', 'name', 'strain', 'arrival_date', 'initial_count', 'supplier', 'target_weight_kg', 'target_age_days', 'chick_unit_cost', 'transport_cost', 'chick_total_cost', 'status', 'archived_at', 'created_at', 'updated_at'],
+  daily_logs: ['id', 'organization_id', 'batch_id', 'log_date', 'mortality', 'culls', 'note', 'feed_starter_kg', 'feed_grower_kg', 'feed_finisher_kg', 'water_liters', 'avg_weight_kg', 'feed_cost', 'health_cost', 'other_cost', 'created_at', 'updated_at'],
+  sales: ['id', 'organization_id', 'batch_id', 'sale_date', 'client_id', 'client_name', 'client_phone', 'client_address', 'heads', 'unit_weight_kg', 'total_weight_kg', 'price_per_kg', 'price_per_head', 'total_amount', 'paid_amount', 'payment_method', 'payment_status', 'channel', 'created_at', 'updated_at'],
+  charges: ['id', 'organization_id', 'batch_id', 'charge_date', 'category', 'description', 'amount', 'created_at', 'updated_at'],
+};
+const REMOTE_TABLES = Object.keys(REMOTE_SCHEMA);
+
+let session = null;
+let remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
+let remoteSettings = {};
+let dataLoaded = false;
+let authMode = 'signin';
+
+function readStoredSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && parsed.access_token && parsed.user ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function persistSession(value) {
+  session = value;
+  try {
+    if (value) localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(value));
+    else localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (error) {
+    console.error('Session non persistée', error);
+  }
+}
+
+function sessionIsFresh() {
+  return Boolean(session && session.expires_at && session.expires_at - 30000 > Date.now());
+}
+
+async function authRequest(path, { method = 'POST', body, token } = {}) {
+  const response = await fetch(`${SUPABASE.url}${path}`, {
+    method,
+    headers: {
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${token || SUPABASE.anonKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  let payload = null;
+  try { payload = text ? JSON.parse(text) : null; } catch (error) { payload = null; }
+  if (!response.ok) {
+    const message = payload?.msg || payload?.message || payload?.error_description || payload?.error || `Erreur ${response.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function storeSession(payload) {
+  if (!payload || !payload.access_token) throw new Error('Connexion impossible : réponse inattendue du serveur.');
+  persistSession({
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+    expires_at: Date.now() + (Number(payload.expires_in) || 3600) * 1000,
+    user: payload.user || session?.user || null,
+  });
+  return session;
+}
+
+async function refreshSession() {
+  if (!session?.refresh_token) throw new Error('Session expirée. Reconnectez-vous.');
+  const payload = await authRequest('/auth/v1/token?grant_type=refresh_token', {
+    body: { refresh_token: session.refresh_token },
+  });
+  storeSession(payload);
+  return session;
+}
+
+async function ensureSession() {
+  if (!session) session = readStoredSession();
+  if (!session) return null;
+  if (sessionIsFresh()) return session;
+  try {
+    await refreshSession();
+    if (!session.user?.id) {
+      const user = await authRequest('/auth/v1/user', { method: 'GET', token: session.access_token });
+      persistSession({ ...session, user });
+    }
+    return session;
+  } catch (error) {
+    console.warn('Session expirée', error);
+    persistSession(null);
+    return null;
+  }
+}
+
+function normalizeIdentifier(raw) {
+  const value = String(raw || '').trim();
+  if (!value) throw new Error('Entrez votre email ou votre numéro de téléphone.');
+  if (value.includes('@')) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) throw new Error('Adresse email invalide.');
+    return value.toLowerCase();
+  }
+  const digits = value.replace(/[^\d]/g, '');
+  if (digits.length < 6) throw new Error('Numéro de téléphone invalide (6 chiffres minimum).');
+  return `${digits}@${PHONE_DOMAIN}`;
+}
+
+function phoneFromIdentifier(email) {
+  return email && email.endsWith(`@${PHONE_DOMAIN}`) ? email.split('@')[0] : null;
+}
+
+async function signInWithIdentifier(identifier, password) {
+  const email = normalizeIdentifier(identifier);
+  const payload = await authRequest('/auth/v1/token?grant_type=password', {
+    body: { email, password },
+  });
+  storeSession(payload);
+  await upsertProfile();
+  return session;
+}
+
+async function signUpWithIdentifier(identifier, password, displayName) {
+  const email = normalizeIdentifier(identifier);
+  const payload = await authRequest('/auth/v1/signup', {
+    body: {
+      email,
+      password,
+      data: { display_name: displayName || '', phone: phoneFromIdentifier(email) || '' },
+    },
+  });
+  if (!payload?.access_token) {
+    throw new Error('Compte créé. La confirmation par email est encore active : validez le lien reçu puis reconnectez-vous.');
+  }
+  storeSession(payload);
+  await upsertProfile(displayName);
+  return session;
+}
+
+async function upsertProfile(displayName = '') {
+  if (!session?.user?.id) return;
+  const email = session.user.email || '';
+  const payload = {
+    id: session.user.id,
+    email,
+    phone: phoneFromIdentifier(email) || '',
+    display_name: displayName || session.user.user_metadata?.display_name || '',
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await apiRequest('/rest/v1/profiles?on_conflict=id', {
+      method: 'POST',
+      body: payload,
+      prefer: 'resolution=merge-duplicates,return=minimal',
+    });
+  } catch (error) {
+    console.warn('Profil non synchronisé', error);
+  }
+}
+
+async function signOut() {
+  const token = session?.access_token;
+  persistSession(null);
+  remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
+  remoteSettings = {};
+  dataLoaded = false;
+  if (token) {
+    fetch(`${SUPABASE.url}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE.anonKey, Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+}
+
+async function apiRequest(path, { method = 'GET', body, headers = {}, prefer } = {}) {
+  if (!SUPABASE.url || !SUPABASE.anonKey) throw new Error('Supabase n’est pas configuré.');
+  if (!session?.access_token) throw new Error('Vous devez être connecté.');
+  const response = await fetch(`${SUPABASE.url}${path}`, {
+    method,
+    headers: {
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      ...(prefer ? { Prefer: prefer } : {}),
+      ...headers,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (response.status === 401 && session.refresh_token) {
+    await refreshSession();
+    return apiRequest(path, { method, body, headers, prefer });
+  }
+  const text = await response.text();
+  let payload = null;
+  try { payload = text ? JSON.parse(text) : null; } catch (error) { payload = null; }
+  if (!response.ok) {
+    const message = payload?.message || payload?.hint || payload?.details || `Erreur ${response.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
+function cleanRecord(storeName, record) {
+  const allowed = REMOTE_SCHEMA[storeName];
+  const payload = { user_id: session.user.id };
+  for (const key of allowed) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+    const value = record[key];
+    if (value === undefined) continue;
+    payload[key] = value === '' ? null : value;
+  }
+  if (!payload.id) payload.id = uid();
+  if (!payload.created_at) payload.created_at = new Date().toISOString();
+  payload.updated_at = new Date().toISOString();
+  return payload;
+}
+
+async function loadRemoteData({ silent = false } = {}) {
+  if (!session?.access_token) throw new Error('Vous devez être connecté.');
+  const queries = REMOTE_TABLES.map((table) => apiRequest(`/rest/v1/${table}?select=*`));
+  const results = await Promise.all(queries);
+  REMOTE_TABLES.forEach((table, index) => {
+    remoteCache[table] = Array.isArray(results[index]) ? results[index] : [];
+  });
+  const settings = await apiRequest('/rest/v1/app_settings?select=key,value');
+  remoteSettings = {};
+  (settings || []).forEach((row) => { remoteSettings[row.key] = row.value; });
+  dataLoaded = true;
+  if (!silent) console.info('Données synchronisées', REMOTE_TABLES.map((table) => `${table}:${remoteCache[table].length}`).join(' '));
+  return getSnapshot();
+}
+
+function readAll(storeName) {
+  if (!REMOTE_TABLES.includes(storeName)) return Promise.resolve([]);
+  return Promise.resolve([...(remoteCache[storeName] || [])]);
+}
+
+function readMeta(key) {
+  return Promise.resolve(remoteSettings[key] ?? null);
+}
+
+async function writeMeta(key, value) {
+  await apiRequest('/rest/v1/app_settings?on_conflict=user_id,key', {
+    method: 'POST',
+    body: { user_id: session.user.id, key, value, updated_at: new Date().toISOString() },
+    prefer: 'resolution=merge-duplicates,return=minimal',
+  });
+  remoteSettings[key] = value;
+  return value;
+}
+
+async function saveRecords(entries) {
+  const saved = [];
+  for (const entry of entries) {
+    const payload = cleanRecord(entry.store, entry.record);
+    const [row] = await apiRequest(`/rest/v1/${entry.store}?on_conflict=id`, {
+      method: 'POST',
+      body: payload,
+      prefer: 'resolution=merge-duplicates,return=representation',
+    });
+    const list = remoteCache[entry.store] || (remoteCache[entry.store] = []);
+    const index = list.findIndex((item) => item.id === row.id);
+    if (index >= 0) list[index] = row; else list.push(row);
+    saved.push(row);
+  }
+  return saved;
+}
+
 async function saveRecord(storeName, record) {
   const [saved] = await saveRecords([{ store: storeName, record }]);
   return saved;
 }
 
-async function getSnapshot() {
-  const [bands, logs, items, movements, sales, charges, clients] = await Promise.all([
-    readAll('bands'), readAll('daily_logs'), readAll('inventory_items'), readAll('inventory_movements'),
-    readAll('sales'), readAll('charges'), readAll('clients'),
-  ]);
-  return { bands, logs, items, movements, sales, charges, clients };
+async function deleteRecord(storeName, id) {
+  if (!id) return;
+  await apiRequest(`/rest/v1/${storeName}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+  remoteCache[storeName] = (remoteCache[storeName] || []).filter((item) => item.id !== id);
 }
+
+async function deleteRecords(storeName, ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return;
+  const filter = unique.join(',');
+  await apiRequest(`/rest/v1/${storeName}?id=in.(${filter})`, { method: 'DELETE' });
+  remoteCache[storeName] = (remoteCache[storeName] || []).filter((item) => !unique.includes(item.id));
+}
+
+async function deleteLogsForBand(bandId) {
+  if (!bandId) return;
+  await apiRequest(`/rest/v1/daily_logs?batch_id=eq.${encodeURIComponent(bandId)}`, { method: 'DELETE' });
+  remoteCache.daily_logs = (remoteCache.daily_logs || []).filter((log) => log.batch_id !== bandId);
+}
+
+async function getSnapshot() {
+  if (!dataLoaded) await loadRemoteData();
+  return {
+    bands: [...remoteCache.bands],
+    logs: [...remoteCache.daily_logs],
+    sales: [...remoteCache.sales],
+    charges: [...remoteCache.charges],
+    items: [],
+    movements: [],
+    clients: [],
+  };
+}
+
+async function migrateLocalData() {
+  if (!db || !session?.user?.id) return false;
+  const flag = `poulet-pro-migrated-${session.user.id}`;
+  try {
+    if (localStorage.getItem(flag)) return false;
+  } catch (error) { /* stockage indisponible */ }
+  const remoteIsEmpty = REMOTE_TABLES.every((table) => !remoteCache[table].length);
+  if (!remoteIsEmpty) {
+    try { localStorage.setItem(flag, '1'); } catch (error) { /* ignore */ }
+    return false;
+  }
+  let local = null;
+  try {
+    local = await localGetSnapshot();
+  } catch (error) {
+    console.warn('Données locales illisibles', error);
+    return false;
+  }
+  const total = ['bands', 'logs', 'sales', 'charges'].reduce((count, key) => count + (local[key]?.length || 0), 0);
+  if (!total) {
+    try { localStorage.setItem(flag, '1'); } catch (error) { /* ignore */ }
+    return false;
+  }
+  const entries = [];
+  for (const [store, key] of [['bands', 'bands'], ['daily_logs', 'logs'], ['sales', 'sales'], ['charges', 'charges']]) {
+    for (const record of local[key] || []) entries.push({ store, record });
+  }
+  await saveRecords(entries);
+  try { localStorage.setItem(flag, '1'); } catch (error) { /* ignore */ }
+  await loadRemoteData({ silent: true });
+  return true;
+}
+
+function userLabel() {
+  if (!session?.user) return 'Mon compte';
+  return session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || 'Mon compte';
+}
+
+function userInitials() {
+  return userLabel().split(/[\s._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || 'VT';
+}
+
 
 function toast(message, error = false) {
   const node = document.createElement('div');
@@ -352,11 +707,12 @@ function renderBands(snapshot) {
 function renderDaily(snapshot) {
   const rows = [...snapshot.logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
     const band = snapshot.bands.find((item) => item.id === log.batch_id);
-    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`;
+    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`;
   }).join('');
   return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalités et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${snapshot.logs.length} relevé${snapshot.logs.length > 1 ? 's' : ''}</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${snapshot.logs.length} relevé${snapshot.logs.length > 1 ? 's' : ''} · la suppression recalcule aussitôt les totaux.</p></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
 }
 
 
@@ -412,6 +768,36 @@ async function deleteSales(ids) {
   return true;
 }
 
+async function deleteDailyLog(logId) {
+  if (!logId) return false;
+  const snapshot = await getSnapshot();
+  const log = snapshot.logs.find((item) => item.id === logId);
+  if (!log) { toast('Relevé introuvable.', true); return false; }
+  const band = snapshot.bands.find((item) => item.id === log.batch_id);
+  const label = `${dateLabel(log.log_date)}${band ? ` — ${band.name}` : ''}`;
+  if (!confirm(`Supprimer le relevé du ${label} ?\n\nLa mortalité (${number(log.mortality)}) et le tri (${number(log.culls)}) seront immédiatement retirés des totaux de la bande.`)) return false;
+  await deleteRecord('daily_logs', logId);
+  if ($('#app-dialog').open) closeDialog();
+  toast('Relevé supprimé · totaux recalculés immédiatement.');
+  await render();
+  publishStock({ silent: true }).catch((error) => console.error(error));
+  return true;
+}
+
+async function deleteCharge(chargeId) {
+  if (!chargeId) return false;
+  const snapshot = await getSnapshot();
+  const charge = snapshot.charges.find((item) => item.id === chargeId);
+  if (!charge) { toast('Charge introuvable.', true); return false; }
+  const band = snapshot.bands.find((item) => item.id === charge.batch_id);
+  if (!confirm(`Supprimer la charge « ${charge.description} » (${currency(charge.amount)}) ?\n\nElle sera immédiatement déduite des dépenses${band ? ` de « ${band.name} »` : ''} et du bénéfice.`)) return false;
+  await deleteRecord('charges', chargeId);
+  if ($('#app-dialog').open) closeDialog();
+  toast('Charge supprimée · dépenses et bénéfice recalculés.');
+  await render();
+  return true;
+}
+
 async function archiveBand(bandId) {
   const band = (await readAll('bands')).find((item) => item.id === bandId);
   if (!band) { toast('Bande introuvable.', true); return; }
@@ -447,13 +833,14 @@ async function emptyTrash() {
 function renderExpenses(snapshot) {
   const rows = [...snapshot.charges].sort((a, b) => b.charge_date.localeCompare(a.charge_date)).map((charge) => {
     const band = snapshot.bands.find((item) => item.id === charge.batch_id);
-    return `<tr><td>${dateLabel(charge.charge_date)}</td><td class="primary-cell">${esc(charge.description)}</td><td>${esc(CATEGORY_LABELS[charge.category] || charge.category)}</td><td>${esc(band?.name || 'Exploitation')}</td><td>${currency(charge.amount)}</td></tr>`;
+    return `<tr><td>${dateLabel(charge.charge_date)}</td><td class="primary-cell">${esc(charge.description)}</td><td>${esc(CATEGORY_LABELS[charge.category] || charge.category)}</td><td>${esc(band?.name || 'Exploitation')}</td><td>${currency(charge.amount)}</td>
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`;
   }).join('');
   const total = sum(snapshot.charges, (charge) => charge.amount);
   return `<div class="page-heading"><div><h1>Charges d’exploitation</h1><p>Centralisez les dépenses directes et communes de la ferme.</p></div><button class="primary-button" data-action="new-charge"><span class="plus">+</span> Ajouter une charge</button></div>
     <section class="metrics-grid">${metricCard('Charges enregistrées', number(snapshot.charges.length), 'Dépenses hors aliment', 'expenses')}${metricCard('Total des charges', currency(total), 'Depuis l’ouverture', 'money')}${metricCard('Coûts des bandes', currency(sum(snapshot.bands, (band) => bandCost(band, snapshot))), 'Poussins, transport, aliment et soins', 'bird')}${metricCard('Dépenses générales', currency(sum(snapshot.charges.filter((item) => !item.batch_id), (item) => item.amount)), 'Non affectées à un lot', 'stock')}</section>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Journal des charges</h2><p>Les aliments consommés sont calculés dans le coût de chaque bande.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Affectation</th><th>Montant</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-d’œuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Affectation</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-d’œuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
 }
 
 
@@ -802,11 +1189,11 @@ async function openBandDetail(bandId) {
         ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
       </div>
       <h3>Relevés (${logs.length})</h3>
-      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th><th>Actions</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td><td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
       <h3>Ventes (${sales.length})</h3>
       ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
       <h3>Charges (${charges.length})</h3>
-      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td><td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
     </div>`;
   setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
@@ -814,6 +1201,7 @@ async function openBandDetail(bandId) {
 
 
 async function render() {
+  if (!session) return;
   const snapshot = await getSnapshot();
   window.snapshot = snapshot;
   const renderers = { dashboard: renderDashboard, bands: renderBands, daily: renderDaily, sales: renderSales, orders: renderOrders, expenses: renderExpenses, annual: renderAnnualStats };
@@ -824,7 +1212,10 @@ async function render() {
   updateOrderBadge();
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date());
   $('#connection-label').textContent = navigator.onLine ? 'Mode hors ligne prêt' : 'Connexion indisponible';
+  const syncLabel = $('#sync-label');
+  if (syncLabel) syncLabel.textContent = session ? 'Synchronisé · compte TALL' : 'Données sur cet appareil';
   $('.offline-dot').classList.toggle('offline', !navigator.onLine);
+  updateAccountUI();
 }
 
 async function setPage(page, { pushHistory = false, focusTab = false, scrollToTop = false } = {}) {
@@ -877,7 +1268,7 @@ async function openDailyForm() {
   const snapshot = await getSnapshot();
   const bands = snapshot.bands.filter(isOpenBand);
   if (!bands.length) { toast('Créez d’abord une bande avant de saisir un relevé.', true); return; }
-  setDialog('Saisie quotidienne', 'Les données sont enregistrées sur cet appareil, même sans réseau.', `
+  setDialog('Saisie quotidienne', 'Les données sont synchronisées avec votre compte, même sur un autre appareil.', `
     <form class="dialog-form" id="daily-form"><div class="form-grid">
       <div class="field"><label for="log-band">Bande *</label><select id="log-band" name="batch_id" required>${batchSelect(bands)}</select></div>
       <div class="field"><label for="log-date">Date du relevé *</label><input id="log-date" name="log_date" type="date" value="${today()}" max="${today()}" required /></div>
@@ -975,7 +1366,7 @@ async function handleSubmit(event) {
   }
   closeDialog();
   await render();
-  toast('Enregistré sur cet appareil.');
+  toast('Enregistré et synchronisé sur votre compte.');
   publishStock({ silent: true }).catch((error) => console.error(error));
 }
 
@@ -1321,6 +1712,192 @@ async function renderOrders(snapshot) {
       : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refusées apparaîtront ici avant leur suppression définitive.</p></div>'}</section>`;
 }
 
+function setAuthError(message) {
+  const node = $('#auth-error');
+  if (!node) return;
+  node.textContent = message || '';
+  node.hidden = !message;
+}
+
+function authBusy(busy) {
+  const button = $('#auth-submit');
+  const spinner = $('#auth-spinner');
+  const label = $('#auth-submit-label');
+  if (!button) return;
+  button.disabled = busy;
+  if (spinner) spinner.hidden = !busy;
+  if (label) label.textContent = busy
+    ? (authMode === 'signup' ? 'Création du compte…' : 'Connexion…')
+    : (authMode === 'signup' ? 'Créer mon compte' : 'Se connecter');
+}
+
+function friendlyAuthError(error) {
+  const message = String(error?.message || error || '');
+  if (/invalid login credentials/i.test(message)) return 'Email/téléphone ou mot de passe incorrect.';
+  if (/user already registered|already been registered/i.test(message)) return 'Ce compte existe déjà. Utilisez l’onglet Connexion.';
+  if (/email not confirmed/i.test(message)) return 'Cet email doit encore être confirmé.';
+  if (/password should be at least/i.test(message)) return 'Le mot de passe doit contenir au moins 6 caractères.';
+  if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis réessayez.';
+  if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. Vérifiez votre réseau.';
+  return message || 'Connexion impossible pour le moment.';
+}
+
+function setAuthMode(mode) {
+  authMode = mode === 'signup' ? 'signup' : 'signin';
+  $$('.auth-tab').forEach((tab) => {
+    const active = tab.dataset.authTab === authMode;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  $$('[data-signup-only]').forEach((node) => { node.hidden = authMode !== 'signup'; });
+  const password = $('#auth-password');
+  if (password) password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
+  const hint = $('#auth-hint');
+  if (hint) hint.textContent = authMode === 'signup'
+    ? 'Votre historique sera synchronisé sur tous vos appareils dès la création du compte.'
+    : 'Retrouvez vos bandes, ventes et charges sur ordinateur comme sur téléphone.';
+  setAuthError('');
+  authBusy(false);
+}
+
+function showAuthScreen() {
+  document.body.classList.remove('is-authenticated');
+  const screen = $('#auth-screen');
+  if (screen) screen.hidden = false;
+  setAuthMode('signin');
+  window.setTimeout(() => $('#auth-identifier')?.focus(), 420);
+}
+
+function hideAuthScreen() {
+  document.body.classList.add('is-authenticated');
+  const screen = $('#auth-screen');
+  if (screen) screen.hidden = true;
+  const dialog = $('#app-dialog');
+  if (dialog?.open) closeDialog();
+}
+
+function updateAccountUI() {
+  const name = $('#profile-name');
+  const email = $('#profile-email');
+  const avatar = $('#profile-avatar');
+  if (name) name.textContent = userLabel();
+  if (email) {
+    const address = session?.user?.email || '';
+    email.textContent = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : (address || 'Non connecté');
+  }
+  if (avatar) avatar.textContent = userInitials();
+}
+
+async function openAccountDialog() {
+  if (!session) return;
+  const snapshot = await getSnapshot();
+  const address = session.user.email || '';
+  const identifier = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : address;
+  const body = `
+    <div class="dialog-form">
+      <h3>${esc(userLabel())}</h3>
+      <p>${esc(identifier)}</p>
+      <div class="metrics-grid" style="margin:12px 0">
+        ${metricCard('Bandes', number(snapshot.bands.length), 'Synchronisées', 'bands')}
+        ${metricCard('Relevés', number(snapshot.logs.length), 'Suivi quotidien', 'daily')}
+        ${metricCard('Ventes', number(snapshot.sales.length), 'Toutes périodes', 'sales')}
+        ${metricCard('Charges', number(snapshot.charges.length), 'Toutes périodes', 'expenses')}
+      </div>
+      <p class="account-note">Ces données sont stockées sur votre compte et se retrouvent automatiquement sur chaque appareil connecté.</p>
+      <div class="dialog-actions" style="justify-content:space-between">
+        <button class="secondary-button danger-outline" type="button" data-action="logout">Se déconnecter</button>
+        <div style="display:flex;gap:8px">
+          <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
+          <button class="primary-button" type="button" data-close-dialog>Fermer</button>
+        </div>
+      </div>
+    </div>`;
+  setDialog('Mon compte', 'Synchronisation multi-appareils sécurisée.', body);
+}
+
+async function syncNow() {
+  if (!session) return;
+  toast('Synchronisation en cours…');
+  await loadRemoteData();
+  await render();
+  toast('Données synchronisées.');
+}
+
+async function logout() {
+  if (!confirm('Se déconnecter de ce compte ?\n\nLes données restent enregistrées et seront retrouvées à la prochaine connexion.')) return;
+  await signOut();
+  if ($('#app-dialog').open) closeDialog();
+  showAuthScreen();
+  toast('Vous êtes déconnecté.');
+}
+
+function bindAuthUI() {
+  const form = $('#auth-form');
+  if (!form) return;
+  $$('.auth-tab').forEach((tab) => {
+    tab.addEventListener('click', () => setAuthMode(tab.dataset.authTab));
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!supabaseReady()) { setAuthError('Supabase n’est pas configuré.'); return; }
+    const identifier = $('#auth-identifier')?.value.trim() || '';
+    const password = $('#auth-password')?.value || '';
+    const displayName = $('#auth-name')?.value.trim() || '';
+    setAuthError('');
+    if (!identifier) { setAuthError('Entrez votre email ou votre numéro de téléphone.'); return; }
+    if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
+    authBusy(true);
+    try {
+      if (authMode === 'signup') await signUpWithIdentifier(identifier, password, displayName);
+      else await signInWithIdentifier(identifier, password);
+      const passwordInput = $('#auth-password');
+      if (passwordInput) passwordInput.value = '';
+      await startApp();
+      toast(authMode === 'signup' ? 'Compte créé · synchronisation activée.' : 'Connexion réussie.');
+    } catch (error) {
+      setAuthError(friendlyAuthError(error));
+    } finally {
+      authBusy(false);
+    }
+  });
+  $('#auth-toggle-password')?.addEventListener('click', () => {
+    const input = $('#auth-password');
+    const button = $('#auth-toggle-password');
+    if (!input || !button) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.textContent = show ? 'Masquer' : 'Afficher';
+    button.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+  });
+  setAuthMode('signin');
+}
+
+async function startApp() {
+  hideAuthScreen();
+  updateAccountUI();
+  try {
+    await loadRemoteData();
+    const migrated = await migrateLocalData();
+    if (migrated) toast('Vos données locales ont été transférées sur votre compte.');
+    if (!remoteSettings.organization_id) await writeMeta('organization_id', uid());
+  } catch (error) {
+    console.error(error);
+    toast(`Synchronisation impossible : ${error.message || 'vérifiez votre réseau.'}`, true);
+  }
+  const initialPage = PAGE_LABELS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
+  if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
+  await setPage(initialPage);
+  refreshOrderBadge();
+  if (supabaseReady()) {
+    getSnapshot()
+      .then((snapshot) => {
+        if (!snapshot.bands.length) return null;
+        return publishStock({ silent: true });
+      })
+      .catch((error) => console.error(error));
+  }
+}
+
 async function handleAction(action, button = null) {
   if (action === 'new-band') openBandForm();
   else if (action === 'edit-band') { if (button?.dataset?.bandId) await openBandForm(button.dataset.bandId); }
@@ -1337,6 +1914,8 @@ async function handleAction(action, button = null) {
   else if (action === 'show-credits') await openCreditsDialog();
   else if (action === 'download-receipt') { if (button?.dataset?.saleId) downloadReceipt(button.dataset.saleId, button); }
   else if (action === 'delete-sale') { if (button?.dataset?.saleId) await deleteSales([button.dataset.saleId]); }
+  else if (action === 'delete-log') { if (button?.dataset?.logId) await deleteDailyLog(button.dataset.logId); }
+  else if (action === 'delete-charge') { if (button?.dataset?.chargeId) await deleteCharge(button.dataset.chargeId); }
   else if (action === 'delete-selected-sales') {
     const ids = $$('[data-sale-check]:checked').map((node) => node.dataset.saleCheck);
     await deleteSales(ids);
@@ -1352,7 +1931,9 @@ async function handleAction(action, button = null) {
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
   else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }
-  else if (action === 'settings') toast('Paramètres locaux uniquement.');
+  else if (action === 'account' || action === 'settings') await openAccountDialog();
+  else if (action === 'sync-now') await syncNow().catch((error) => toast(error.message || 'Synchronisation impossible.', true));
+  else if (action === 'logout') await logout();
 }
 
 async function routeEvent(event) {
@@ -1388,7 +1969,12 @@ function handleTabKeydown(event) {
 }
 
 async function main() {
-  db = await openDatabase();
+  try {
+    db = await openDatabase();
+  } catch (error) {
+    console.warn('Stockage local indisponible (migration ignorée).', error);
+    db = null;
+  }
   await preloadLogo();
   document.querySelectorAll('[data-icon]').forEach((node) => {
     if (ICONS[node.dataset.icon]) node.innerHTML = icon(node.dataset.icon);
@@ -1417,9 +2003,10 @@ async function main() {
   $('#app-dialog').addEventListener('click', (event) => {
     if (event.target === $('#app-dialog')) closeDialog();
   });
-  window.addEventListener('online', () => render().catch((error) => toast(error.message, true)));
-  window.addEventListener('offline', () => render().catch((error) => toast(error.message, true)));
+  window.addEventListener('online', () => { if (session) render().catch((error) => toast(error.message, true)); });
+  window.addEventListener('offline', () => { if (session) render().catch((error) => toast(error.message, true)); });
   const navigateFromHistory = () => {
+    if (!session) return;
     const page = location.hash.slice(1) || 'dashboard';
     setPage(page, { scrollToTop: true })
       .catch((error) => toast(error.message || 'Impossible de restaurer cette section.', true));
@@ -1429,21 +2016,20 @@ async function main() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('Service worker non enregistré :', error));
   }
-  const initialPage = PAGE_LABELS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
-  if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
-  await setPage(initialPage);
-  refreshOrderBadge();
-  if (supabaseReady()) {
-    getSnapshot()
-      .then((snapshot) => {
-        if (!snapshot.bands.length) return null;
-        return publishStock({ silent: true });
-      })
-      .catch((error) => console.error(error));
+  bindAuthUI();
+  updateAccountUI();
+  const restored = await ensureSession();
+  if (restored) {
+    await startApp();
+  } else {
+    showAuthScreen();
   }
 }
 
 main().catch((error) => {
   console.error(error);
-  $('#page-container').innerHTML = emptyState('Impossible de démarrer l’application', error.message || 'Le stockage local est indisponible.');
+  document.body.classList.remove('is-authenticated');
+  const screen = $('#auth-screen');
+  if (screen) screen.hidden = false;
+  setAuthError('Impossible de démarrer l’application. Vérifiez votre connexion puis rechargez la page.');
 });
