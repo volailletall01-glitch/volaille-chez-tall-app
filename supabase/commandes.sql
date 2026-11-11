@@ -15,7 +15,7 @@ create table if not exists public.app_config (
   id smallint primary key default 1 check (id = 1),
   stock_heads integer not null default 0 check (stock_heads >= 0),
   min_price integer not null default 2500 check (min_price > 0),
-  max_price integer not null default 4500 check (max_price >= min_price),
+  max_price integer not null default 25000 check (max_price >= min_price),
   updated_at timestamptz not null default now()
 );
 
@@ -30,13 +30,22 @@ create table if not exists public.orders (
   client_phone text not null check (char_length(client_phone) between 6 and 30),
   neighborhood text not null check (char_length(neighborhood) between 2 and 120),
   quantity integer not null check (quantity > 0 and quantity <= 5000),
-  price_per_head integer not null check (price_per_head between 2500 and 4500),
+  price_per_head integer not null check (price_per_head between 2500 and 25000),
   status text not null default 'en_attente'
     check (status in ('en_attente', 'validee', 'refusee')),
   handled_at timestamptz
 );
 
 create index if not exists orders_status_created_idx on public.orders (status, created_at desc);
+
+-- Migration des installations existantes : fourchette de prix 2 500 - 25 000 FCFA.
+alter table public.orders drop constraint if exists orders_price_per_head_check;
+alter table public.orders add constraint orders_price_per_head_check
+  check (price_per_head between 2500 and 25000);
+alter table public.app_config alter column max_price set default 25000;
+alter table public.app_config drop constraint if exists app_config_max_price_check;
+alter table public.app_config add constraint app_config_max_price_check
+  check (max_price >= min_price);
 
 alter table public.orders enable row level security;
 alter table public.app_config enable row level security;
@@ -61,6 +70,12 @@ create policy "orders_update_app" on public.orders
   using (true)
   with check (status in ('en_attente', 'validee', 'refusee'));
 
+-- Corbeille : les commandes refusées sont supprimées après 72 h (ou manuellement).
+drop policy if exists "orders_delete_app" on public.orders;
+create policy "orders_delete_app" on public.orders
+  for delete to anon, authenticated
+  using (status = 'refusee');
+
 -- Politiques stock publié
 drop policy if exists "config_read_public" on public.app_config;
 create policy "config_read_public" on public.app_config
@@ -78,8 +93,8 @@ create policy "config_update_app" on public.app_config
 revoke all on public.orders from anon;
 grant insert (client_name, client_phone, neighborhood, quantity, price_per_head)
   on public.orders to anon;
-grant select, update on public.orders to anon;
-grant select, update on public.orders to authenticated;
+grant select, update, delete on public.orders to anon;
+grant select, update, delete on public.orders to authenticated;
 
 revoke all on public.app_config from anon;
 grant select, update on public.app_config to anon;

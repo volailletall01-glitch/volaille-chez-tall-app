@@ -49,6 +49,9 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':
 const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
 const daysSince = (date) => Math.max(0, Math.floor((new Date(`${today()}T12:00:00`) - new Date(`${date}T12:00:00`)) / 86400000));
 const sum = (items, getter) => items.reduce((total, item) => total + (Number(getter(item)) || 0), 0);
+const isArchived = (band) => Boolean(band && band.archived_at);
+const isOpenBand = (band) => Boolean(band) && !isArchived(band) && band.status !== 'closed';
+const visibleBands = (snapshot) => snapshot.bands.filter((band) => !isArchived(band));
 
 async function preloadLogo() {
   try {
@@ -124,6 +127,18 @@ async function deleteRecord(storeName, id) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     transaction.objectStore(storeName).delete(id);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
+  });
+}
+
+async function deleteRecords(storeName, ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return;
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    for (const id of unique) store.delete(id);
     transaction.oncomplete = resolve;
     transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
   });
@@ -229,37 +244,75 @@ function metricCard(label, value, note, iconName, noteClass = '') {
     <div class="metric-value">${value}</div><div class="metric-note ${noteClass}">${note}</div></article>`;
 }
 
+function bandMortality(band, snapshot) {
+  return sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.mortality);
+}
+
+function bandRevenue(band, snapshot) {
+  return sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.total_amount);
+}
+
 function renderDashboard(snapshot) {
-  const active = snapshot.bands.filter((band) => band.status !== 'closed');
-  const live = sum(active, (band) => activeBirds(band, snapshot));
-  const mortalities = sum(snapshot.logs, (log) => log.mortality);
-  const initial = sum(snapshot.bands, (band) => band.initial_count);
-  const mortalityRate = initial ? (mortalities / initial) * 100 : 0;
-  const revenue = sum(snapshot.sales, (sale) => sale.total_amount);
-  const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot))
-    + sum(snapshot.charges.filter((charge) => !charge.batch_id), (charge) => charge.amount);
-  const profit = revenue - totalCosts;
-  return `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole.</p></div></div>
-    <section class="metrics-grid" aria-label="Indicateurs clés">
-      ${metricCard('Sujets en élevage', number(live), `${active.length} bande${active.length > 1 ? 's' : ''} active${active.length > 1 ? 's' : ''}`, 'bird')}
-      ${metricCard('Mortalité cumulée', `${number(mortalityRate, 1)} <small>%</small>`, `${number(mortalities)} sujet${mortalities > 1 ? 's' : ''} enregistré${mortalities > 1 ? 's' : ''}`, 'daily', mortalityRate > 5 ? 'low-stock' : '')}
-      ${metricCard('Chiffre d’affaires', currency(revenue), `Marge estimée : ${currency(profit)}`, 'money', profit >= 0 ? 'positive' : 'low-stock')}
-    </section>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Par bande</h2><p>Sujets en élevage, mortalité cumulée, chiffre d’affaires, dépenses et bénéfice par bande.</p></div></div>
-      ${snapshot.bands.length ? `<div class="table-wrap"><table><thead><tr><th>Bande</th><th>Sujets en élevage</th><th>Mortalité cumulée</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${snapshot.bands.map((band) => {
-        const birds = activeBirds(band, snapshot);
-        const deaths = sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.mortality);
-        const bandRevenue = sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.total_amount);
-        const costs = bandCost(band, snapshot);
-        const bandProfit = bandRevenue - costs;
-        return `<tr><td class="primary-cell">${esc(band.name)}</td><td>${number(birds)}</td><td>${number(deaths)}</td><td>${currency(bandRevenue)}</td><td>${currency(costs)}</td><td class="${bandProfit >= 0 ? 'positive' : 'low-stock'}">${currency(bandProfit)}</td></tr>`;
-      }).join('')}</tbody></table></div>` : emptyState('Aucune bande pour le moment', 'Créez votre premier lot pour commencer le suivi.', '<button class="primary-button" data-action="new-band">Créer une bande</button>')}</section>`;
+  const bands = visibleBands(snapshot);
+  const archivedCount = snapshot.bands.length - bands.length;
+  const heading = `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole, bande par bande.</p></div></div>`;
+
+  if (!bands.length) {
+    return `${heading}
+      <section class="panel table-panel">${emptyState('Aucune bande active', 'Créez votre premier lot pour voir apparaître ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Créer une bande</button>')}</section>`;
+  }
+
+  const cards = bands.map((band) => {
+    const birds = activeBirds(band, snapshot);
+    const deaths = bandMortality(band, snapshot);
+    const rate = Number(band.initial_count) ? (deaths / Number(band.initial_count)) * 100 : 0;
+    const revenue = bandRevenue(band, snapshot);
+    const costs = bandCost(band, snapshot);
+    const profit = revenue - costs;
+    const closed = band.status === 'closed';
+    return `<article class="band-kpi">
+      <header class="band-kpi-head">
+        <div><h3>${esc(band.name)}</h3><p>${esc(band.strain || 'Souche non précisée')} · J${daysSince(band.arrival_date)} / ${Number(band.target_age_days || 42)} j</p></div>
+        <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Clôturée' : 'En cours'}</span>
+      </header>
+      <div class="band-kpi-grid">
+        <div><span>Sujets en élevage</span><strong>${number(birds)}</strong></div>
+        <div><span>Mortalité cumulée</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
+        <div><span>Chiffre d’affaires</span><strong>${currency(revenue)}</strong></div>
+        <div><span>Dépenses</span><strong>${currency(costs)}</strong></div>
+        <div class="wide"><span>Bénéfice</span><strong class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</strong></div>
+      </div>
+    </article>`;
+  }).join('');
+
+  const maxRevenue = Math.max(0, ...bands.map((band) => bandRevenue(band, snapshot)));
+  const chart = maxRevenue > 0
+    ? bands.map((band) => {
+      const revenue = bandRevenue(band, snapshot);
+      const width = Math.max(revenue > 0 ? 2 : 0, (revenue / maxRevenue) * 100);
+      return `<div class="band-chart-row"><span class="band-chart-label">${esc(band.name)}</span>
+        <div class="band-chart-track"><div class="band-chart-bar" style="width:${width.toFixed(1)}%"></div></div>
+        <span class="band-chart-value">${currency(revenue)}</span></div>`;
+    }).join('')
+    : '<p class="band-chart-empty">Aucune vente enregistrée pour le moment : les barres apparaîtront dès la première vente.</p>';
+
+  return `${heading}
+    <section class="band-kpi-list" aria-label="Indicateurs par bande">${cards}</section>
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
+    <section class="panel band-chart-panel">
+      <div class="panel-header"><div><h2>Chiffre d’affaires par bande</h2><p>Répartition des recettes enregistrées pour chaque lot.</p></div></div>
+      <div class="band-chart">${chart}</div>
+    </section>`;
 }
 
 function renderBands(snapshot) {
-  const rows = [...snapshot.bands].sort((a, b) => b.arrival_date.localeCompare(a.arrival_date)).map((band) => {
+  const visible = [...visibleBands(snapshot)].sort((a, b) => (b.arrival_date || '').localeCompare(a.arrival_date || ''));
+  const archived = snapshot.bands.filter(isArchived)
+    .sort((a, b) => String(b.archived_at || '').localeCompare(String(a.archived_at || '')));
+
+  const rows = visible.map((band) => {
     const birds = activeBirds(band, snapshot);
-    const mortality = sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.mortality);
+    const mortality = bandMortality(band, snapshot);
     const percent = band.initial_count ? (mortality / band.initial_count) * 100 : 0;
     const days = daysSince(band.arrival_date);
     const weight = [...snapshot.logs].filter((log) => log.batch_id === band.id && log.avg_weight_kg).sort((a, b) => b.log_date.localeCompare(a.log_date))[0]?.avg_weight_kg;
@@ -274,13 +327,26 @@ function renderBands(snapshot) {
       <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td>
       <td class="actions-cell">
         <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">✎</button>
-        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique">↺</button>
-        <button class="icon-button danger-button" type="button" data-action="delete-band" data-band-id="${esc(band.id)}" title="Supprimer">✕</button>
+        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique des relevés">↺</button>
+        <button class="secondary-button danger-outline" type="button" data-action="archive-band" data-band-id="${esc(band.id)}" title="Archiver la bande">Archiver</button>
       </td></tr>`;
   }).join('');
+
+  const archivedRows = archived.map((band) => {
+    const birds = activeBirds(band, snapshot);
+    const deaths = bandMortality(band, snapshot);
+    const revenue = bandRevenue(band, snapshot);
+    return `<tr><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')}</span></td>
+      <td>${dateLabel(band.arrival_date)}</td><td>${number(band.initial_count)}</td><td>${number(birds)}</td><td>${number(deaths)}</td><td>${currency(revenue)}</td>
+      <td>${band.archived_at ? dateLabel(String(band.archived_at).slice(0, 10)) : '—'}</td>
+      <td class="actions-cell"><button class="secondary-button" type="button" data-action="restore-band" data-band-id="${esc(band.id)}">Restaurer</button></td></tr>`;
+  }).join('');
+
   return `<div class="page-heading"><div><h1>Bandes de production</h1><p>Suivez vos lots de poulets de chair du démarrage à la vente.</p></div><button class="primary-button" data-action="new-band"><span class="plus">+</span> Nouvelle bande</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${snapshot.bands.length} bande${snapshot.bands.length > 1 ? 's' : ''} enregistrée${snapshot.bands.length > 1 ? 's' : ''}</p></div></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>`;
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${visible.length} bande${visible.length > 1 ? 's' : ''} active${visible.length > 1 ? 's' : ''}</p></div></div>
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>
+    ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archivées</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retirée${archived.length > 1 ? 's' : ''} de l’élevage — leur historique reste comptabilisé dans les statistiques et rapports globaux.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Poussins</th><th>Sujets restants</th><th>Mortalité</th><th>Chiffre d’affaires</th><th>Archivée le</th><th>Action</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
 }
 
 function renderDaily(snapshot) {
@@ -295,17 +361,87 @@ function renderDaily(snapshot) {
 
 
 function renderSales(snapshot) {
-  const rows = [...snapshot.sales].sort((a, b) => b.sale_date.localeCompare(a.sale_date)).map((sale) => {
+  const rows = [...snapshot.sales].sort((a, b) => (b.sale_date || '').localeCompare(a.sale_date || '')).map((sale) => {
     const band = snapshot.bands.find((item) => item.id === sale.batch_id);
     const due = Number(sale.total_amount) - Number(sale.paid_amount);
-    return `<tr><td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td><td><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}">Télécharger le reçu</button></td></tr>`;
+    return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="Sélectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
+      <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td>
+      <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Reçu</button>
+      <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">✕</button></td></tr>`;
   }).join('');
   const revenue = sum(snapshot.sales, (sale) => sale.total_amount);
   const unpaid = sum(snapshot.sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
   return `<div class="page-heading"><div><h1>Ventes & commandes</h1><p>Associez chaque vente à son lot et suivez les règlements clients.</p></div><button class="primary-button" data-action="new-sale"><span class="plus">+</span> Nouvelle vente</button></div>
     <section class="metrics-grid">${metricCard('Ventes enregistrées', number(snapshot.sales.length), 'Toutes périodes', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Crédits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste à encaisser — cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(snapshot.sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au détail ou sur commande.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>État</th><th>Reçu</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistrée', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Créer une vente</button>')}</section>`;
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au détail ou sur commande. Cochez les lignes pour supprimer plusieurs ventes.</p></div>
+      <div class="sales-bulk"><label class="sales-check-all"><input type="checkbox" id="sales-select-all" /> Tout sélectionner</label>
+      <button class="secondary-button danger-outline" type="button" id="sales-delete-selected" data-action="delete-selected-sales" disabled>Supprimer la sélection</button></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th class="check-cell"><span class="sr-only">Sélection</span></th><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>État</th><th>Reçu / Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistrée', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Créer une vente</button>')}</section>`;
+}
+
+function updateSalesSelection() {
+  const checks = $$('[data-sale-check]');
+  const checked = checks.filter((node) => node.checked);
+  const all = $('#sales-select-all');
+  if (all) {
+    all.checked = checks.length > 0 && checked.length === checks.length;
+    all.indeterminate = checked.length > 0 && checked.length < checks.length;
+  }
+  const button = $('#sales-delete-selected');
+  if (button) {
+    button.disabled = checked.length === 0;
+    button.textContent = checked.length ? `Supprimer la sélection (${checked.length})` : 'Supprimer la sélection';
+  }
+  checks.forEach((node) => node.closest('tr')?.classList.toggle('row-selected', node.checked));
+}
+
+async function deleteSales(ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return false;
+  const snapshot = await getSnapshot();
+  const sales = snapshot.sales.filter((sale) => unique.includes(sale.id));
+  const heads = sum(sales, (sale) => sale.heads);
+  const message = unique.length === 1
+    ? `Supprimer cette vente ? Les ${number(heads)} sujet${heads > 1 ? 's' : ''} reviendront dans le stock disponible.`
+    : `Supprimer ces ${unique.length} ventes ? Les ${number(heads)} sujets reviendront dans le stock disponible.`;
+  if (!confirm(message)) return false;
+  await deleteRecords('sales', unique);
+  toast(`${unique.length} vente${unique.length > 1 ? 's' : ''} supprimée${unique.length > 1 ? 's' : ''} · stock mis à jour.`);
+  await render();
+  publishStock({ silent: true }).catch((error) => console.error(error));
+  return true;
+}
+
+async function archiveBand(bandId) {
+  const band = (await readAll('bands')).find((item) => item.id === bandId);
+  if (!band) { toast('Bande introuvable.', true); return; }
+  if (!confirm(`Archiver la bande « ${band.name} » ?\n\nElle disparaîtra de l’élevage actif, mais tout son historique (relevés, ventes, charges) restera conservé dans les statistiques et rapports globaux.`)) return;
+  await saveRecord('bands', { ...band, archived_at: new Date().toISOString() });
+  toast('Bande archivée — historique conservé.');
+  await render();
+  publishStock({ silent: true }).catch((error) => console.error(error));
+}
+
+async function restoreBand(bandId) {
+  const band = (await readAll('bands')).find((item) => item.id === bandId);
+  if (!band) { toast('Bande introuvable.', true); return; }
+  await saveRecord('bands', { ...band, archived_at: null });
+  toast('Bande restaurée dans l’élevage actif.');
+  await render();
+  publishStock({ silent: true }).catch((error) => console.error(error));
+}
+
+async function emptyTrash() {
+  const refused = ordersState.orders.filter((order) => order.status === 'refusee');
+  if (!refused.length) { toast('La corbeille est déjà vide.'); return; }
+  if (!confirm(`Supprimer définitivement les ${refused.length} commande${refused.length > 1 ? 's' : ''} refusée${refused.length > 1 ? 's' : ''} ? Cette action est irréversible.`)) return;
+  try {
+    await purgeTrash({ force: true });
+    toast('Corbeille vidée.');
+    await render();
+  } catch (error) {
+    toast(error.message || 'Impossible de vider la corbeille.', true);
+  }
 }
 
 function renderExpenses(snapshot) {
@@ -373,40 +509,112 @@ function normalizeAscii(value) {
     .replace(/[\u00a0\u2007\u2009\u202f]/g, ' ');
 }
 
-function escapePdfText(value) {
-  return normalizeAscii(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+function pdfSafe(value) {
+  return String(value ?? '')
+    .replace(/[\u2018\u2019\u201a]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/[\u00a0\u2007\u2009\u202f]/g, ' ')
+    .replace(/\u20ac/g, '\x80')
+    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE')
+    .replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
+}
+
+function pdfString(value) {
+  return pdfSafe(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function wrapWords(text, width) {
+  const words = String(text ?? '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    if (!current) current = word;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
+    else { lines.push(current); current = word; }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 function buildReceiptPdf(sale, band) {
+  const PAGE_WIDTH = 227;       // 80 mm
+  const MARGIN = 9;
+  const BASE_SIZE = 8;
+  const CHAR_RATIO = 0.6;       // police Courier
+  const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+  const MAX_CHARS = Math.floor(CONTENT_WIDTH / (BASE_SIZE * CHAR_RATIO));
+  const LINE_HEIGHT = 1.32;
+
   const total = Number(sale.total_amount) || 0;
   const paid = Number(sale.paid_amount) || 0;
-  const due = total - paid;
-  const lines = [];
-  lines.push('RECU DE VENTE - VOLAILLE CHEZ TALL');
-  lines.push('');
-  lines.push(`Date : ${dateLabel(sale.sale_date)}`);
-  lines.push(`Client : ${sale.client_name || 'Vente comptoir'}`);
-  lines.push(`Telephone : ${sale.client_phone || '-'}`);
-  lines.push(`Adresse : ${sale.client_address || '-'}`);
-  lines.push(`Bande source : ${band?.name || '-'}`);
-  lines.push(`Nombre de sujets : ${number(sale.heads)}`);
+  const due = Math.max(0, total - paid);
+  const heads = Number(sale.heads) || 0;
   const perHead = Number(sale.price_per_head) || 0;
+  const weight = Number(sale.total_weight_kg) || 0;
+  const priceKg = Number(sale.price_per_kg) || 0;
+  const payment = PAYMENT_LABELS[sale.payment_method] || 'Espèces';
+  const client = sale.client_name || 'Vente comptoir';
+  const receiptNo = String(sale.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || '—';
+
+  const items = [];
+  const addLine = (text = '', { bold = false, size = BASE_SIZE, align = 'left', gap = 0 } = {}) => {
+    items.push({ text: pdfSafe(text), bold, size, align, gap });
+  };
+  const addRule = (char = '-') => addLine(char.repeat(MAX_CHARS));
+  const addPair = (label, value, { bold = false } = {}) => {
+    const room = MAX_CHARS - label.length - value.length;
+    addLine(`${label}${' '.repeat(Math.max(1, room))}${value}`, { bold });
+  };
+  const addField = (label, value) => {
+    wrapWords(`${label} : ${value}`, MAX_CHARS).forEach((line, index) => addLine(index ? `  ${line}` : line));
+  };
+
+  addLine('VOLAILLE CHEZ TALL', { bold: true, size: 11, align: 'center' });
+  addLine('Poulets de chair', { size: 8, align: 'center' });
+  addLine('Kalaban Coura ACI — Bamako', { size: 8, align: 'center' });
+  addLine('Tél : +223 78 31 48 18', { size: 8, align: 'center', gap: 2 });
+  addRule('=');
+  addLine('TICKET DE CAISSE', { bold: true, size: 10, align: 'center' });
+  addLine(`Reçu n° ${receiptNo}`, { size: 7, align: 'center', gap: 1 });
+  addLine('');
+  addField('Date', dateLabel(sale.sale_date));
+  const time = sale.created_at ? new Date(sale.created_at) : new Date();
+  if (!Number.isNaN(time.getTime())) {
+    addField('Heure', new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(time));
+  }
+  addField('Client', client);
+  if (sale.client_phone) addField('Téléphone', sale.client_phone);
+  if (sale.client_address) addField('Adresse', sale.client_address);
+  if (band && band.name) addField('Bande', band.name);
+  addRule('-');
+  addLine('DÉSIGNATION', { bold: true });
+  addLine('Poulets de chair');
   if (perHead > 0) {
-    lines.push(`Prix par tete : ${currency(perHead)}`);
+    addLine(`  ${number(heads)} tête${heads > 1 ? 's' : ''} × ${currency(perHead)}`);
   } else {
-    lines.push(`Poids total : ${number(sale.total_weight_kg, 1)} kg`);
-    lines.push(`Prix par kg : ${currency(sale.price_per_kg)}`);
+    addLine(`  ${number(weight, 1)} kg × ${currency(priceKg)}/kg`);
   }
-  lines.push('');
-  if (due > 0) {
-    lines.push(`Montant paye : ${currency(paid)}`);
-    lines.push(`Reste a payer (reliquat) : ${currency(due)}`);
-    lines.push(`Montant global : ${currency(total)}`);
-  } else {
-    lines.push(`Montant global regle : ${currency(total)}`);
-  }
-  lines.push('');
-  lines.push('Merci pour votre achat.');
+  addLine('');
+  addRule('=');
+  addPair('TOTAL', currency(total), { bold: true });
+  addPair('MONTANT RÉGLÉ', currency(paid));
+  addPair('SOLDE RESTANT', due > 0 ? currency(due) : 'SOLDÉ', { bold: due > 0 });
+  addLine(`Règlement : ${payment}`, { gap: 2 });
+  addRule('-');
+  addLine('Merci de votre confiance !', { bold: true, align: 'center', gap: 2 });
+  addLine('Vos poulets frais, de la ferme à votre table.', { size: 7, align: 'center' });
+  addLine('Volaille chez TALL — Kalaban Coura ACI', { size: 7, align: 'center' });
+  addLine('Tél : +223 78 31 48 18', { size: 7, align: 'center' });
+  addLine('Ce ticket fait foi de votre achat.', { size: 7, align: 'center', gap: 2 });
+
+  const textHeight = items.reduce((height, item) => height + item.gap + item.size * LINE_HEIGHT, 0);
+  const logoWidth = 64;
+  const logoHeight = logoJpeg ? Math.max(1, Math.round((logoJpeg.height / logoJpeg.width) * logoWidth)) : 0;
+  const pageHeight = Math.ceil(MARGIN * 2 + (logoJpeg ? logoHeight + 7 : 0) + textHeight);
 
   const chunks = [];
   let totalLen = 0;
@@ -422,28 +630,32 @@ function buildReceiptPdf(sale, band) {
   objOffsets[1] = mark(); add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
   objOffsets[2] = mark(); add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
 
-  let pageObj = '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >>';
-  if (logoJpeg) pageObj += ' /XObject << /Im1 6 0 R >>';
+  let pageObj = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${pageHeight}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >>`;
+  if (logoJpeg) pageObj += ' /XObject << /Im1 7 0 R >>';
   pageObj += ' >> >>\nendobj\n';
   objOffsets[3] = mark(); add(pageObj);
 
   const contentParts = [];
-  let y = 700;
+  let y = pageHeight - MARGIN;
   if (logoJpeg) {
-    const w = logoJpeg.width;
-    const h = logoJpeg.height;
     contentParts.push('q');
-    contentParts.push(`${w} 0 0 ${h} 50 ${y - h} cm`);
+    contentParts.push(`${logoWidth} 0 0 ${logoHeight} ${((PAGE_WIDTH - logoWidth) / 2).toFixed(2)} ${(y - logoHeight).toFixed(2)} cm`);
     contentParts.push('/Im1 Do');
     contentParts.push('Q');
-    y -= (h + 12);
+    y -= logoHeight + 7;
   }
   contentParts.push('BT');
-  contentParts.push('/F1 14 Tf');
-  for (const line of lines) {
-    contentParts.push(`1 0 0 1 50 ${y} Tm`);
-    contentParts.push(`(${escapePdfText(line)}) Tj`);
-    y -= 18;
+  for (const item of items) {
+    y -= item.gap;
+    const font = item.bold ? 'F2' : 'F1';
+    contentParts.push(`/${font} ${item.size} Tf`);
+    const textWidth = item.text.length * item.size * CHAR_RATIO;
+    let x = MARGIN;
+    if (item.align === 'center') x = (PAGE_WIDTH - textWidth) / 2;
+    else if (item.align === 'right') x = PAGE_WIDTH - MARGIN - textWidth;
+    contentParts.push(`1 0 0 1 ${Math.max(MARGIN, x).toFixed(2)} ${y.toFixed(2)} Tm`);
+    contentParts.push(`(${pdfString(item.text)}) Tj`);
+    y -= item.size * LINE_HEIGHT;
   }
   contentParts.push('ET');
   const stream = contentParts.join('\n');
@@ -453,12 +665,13 @@ function buildReceiptPdf(sale, band) {
   add(streamBytes);
   add('\nendstream\nendobj\n');
 
-  objOffsets[5] = mark(); add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
+  objOffsets[5] = mark(); add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>\nendobj\n');
+  objOffsets[6] = mark(); add('6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>\nendobj\n');
 
-  const numObjs = logoJpeg ? 6 : 5;
+  const numObjs = logoJpeg ? 7 : 6;
   if (logoJpeg) {
-    objOffsets[6] = mark();
-    add(`6 0 obj\n<< /Type /XObject /Subtype /Image /Width ${logoJpeg.width} /Height ${logoJpeg.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.data.length} >>\nstream\n`);
+    objOffsets[7] = mark();
+    add(`7 0 obj\n<< /Type /XObject /Subtype /Image /Width ${logoJpeg.width} /Height ${logoJpeg.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpeg.data.length} >>\nstream\n`);
     add(logoJpeg.data);
     add('\nendstream\nendobj\n');
   }
@@ -506,6 +719,8 @@ function downloadReceipt(saleId, button) {
       price_per_head: Number(btn.dataset.priceHead) || 0,
       total_amount: Number(btn.dataset.total) || 0,
       paid_amount: Number(btn.dataset.paid) || 0,
+      payment_method: btn.dataset.payment || 'cash',
+      created_at: btn.dataset.createdAt || '',
     };
   }
   if (!sale) {
@@ -605,7 +820,7 @@ async function render() {
   $('#page-container').innerHTML = await renderers[currentPage](snapshot);
   $('#page-container').setAttribute('aria-labelledby', `tab-${currentPage}`);
   $('#page-title').textContent = PAGE_LABELS[currentPage];
-  $('#band-count').textContent = snapshot.bands.length;
+  $('#band-count').textContent = snapshot.bands.filter((band) => !isArchived(band)).length;
   updateOrderBadge();
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date());
   $('#connection-label').textContent = navigator.onLine ? 'Mode hors ligne prêt' : 'Connexion indisponible';
@@ -660,7 +875,7 @@ async function openBandForm(bandId = null) {
 
 async function openDailyForm() {
   const snapshot = await getSnapshot();
-  const bands = snapshot.bands.filter((band) => band.status !== 'closed');
+  const bands = snapshot.bands.filter(isOpenBand);
   if (!bands.length) { toast('Créez d’abord une bande avant de saisir un relevé.', true); return; }
   setDialog('Saisie quotidienne', 'Les données sont enregistrées sur cet appareil, même sans réseau.', `
     <form class="dialog-form" id="daily-form"><div class="form-grid">
@@ -674,7 +889,7 @@ async function openDailyForm() {
 
 async function openSaleForm() {
   const snapshot = await getSnapshot();
-  const bands = snapshot.bands.filter((band) => band.status !== 'closed' && activeBirds(band, snapshot) > 0);
+  const bands = snapshot.bands.filter((band) => isOpenBand(band) && activeBirds(band, snapshot) > 0);
   if (!bands.length) { toast('Aucun sujet disponible à la vente. Créez une bande ou vérifiez vos effectifs.', true); return; }
   setDialog('Nouvelle vente', 'Associez la vente à un lot pour assurer la traçabilité.', `
     <form class="dialog-form" id="sale-form"><div class="form-grid">
@@ -698,7 +913,7 @@ async function openSaleForm() {
 }
 
 async function openChargeForm() {
-  const bands = (await readAll('bands')).filter((band) => band.status !== 'closed');
+  const bands = (await readAll('bands')).filter(isOpenBand);
   setDialog('Ajouter une charge', 'Les dépenses peuvent être affectées à un lot ou à toute l’exploitation.', `
     <form class="dialog-form" id="charge-form"><div class="form-grid">
       <div class="field"><label for="charge-date">Date *</label><input id="charge-date" name="charge_date" type="date" value="${today()}" required /></div>
@@ -808,11 +1023,11 @@ async function publishStock({ silent = false } = {}) {
     return;
   }
   const snapshot = await getSnapshot();
-  const heads = sum(snapshot.bands.filter((band) => band.status !== 'closed'), (band) => activeBirds(band, snapshot));
+  const heads = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
   const payload = {
     stock_heads: heads,
     min_price: Number(SUPABASE.minPrice) || 2500,
-    max_price: Number(SUPABASE.maxPrice) || 4500,
+    max_price: Number(SUPABASE.maxPrice) || 25000,
     updated_at: new Date().toISOString(),
   };
   await supabaseRequest('/rest/v1/app_config?id=eq.1', {
@@ -867,7 +1082,7 @@ async function validateOrder(orderId, button) {
   if (button) button.disabled = true;
   try {
     const snapshot = await getSnapshot();
-    const active = snapshot.bands.filter((band) => band.status !== 'closed');
+    const active = snapshot.bands.filter(isOpenBand);
     const available = sum(active, (band) => activeBirds(band, snapshot));
     if (Number(order.quantity) > available) {
       throw new Error(`Stock insuffisant : ${number(available)} sujet${available > 1 ? 's' : ''} disponible${available > 1 ? 's' : ''} pour ${number(order.quantity)} demandé${Number(order.quantity) > 1 ? 's' : ''}.`);
@@ -971,6 +1186,37 @@ async function copyOrderLink() {
   }
 }
 
+const TRASH_HOURS = 72;
+
+function trashDeadline(order) {
+  const handled = new Date(order.handled_at || order.created_at || Date.now());
+  return new Date(handled.getTime() + TRASH_HOURS * 3600 * 1000);
+}
+
+function trashCountdown(order) {
+  const ms = trashDeadline(order).getTime() - Date.now();
+  if (ms <= 0) return 'Suppression imminente';
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  return hours >= 1 ? `${hours} h ${String(minutes).padStart(2, '0')} min` : `${minutes} min`;
+}
+
+async function purgeTrash({ force = false } = {}) {
+  if (!supabaseReady()) return 0;
+  const now = Date.now();
+  const expired = ordersState.orders.filter((order) => order.status === 'refusee'
+    && (force || trashDeadline(order).getTime() <= now));
+  if (!expired.length) return 0;
+  const filter = expired.map((order) => encodeURIComponent(order.id)).join(',');
+  await supabaseRequest(`/rest/v1/orders?id=in.(${filter})`, {
+    method: 'DELETE',
+    headers: { Prefer: 'return=minimal' },
+  });
+  const ids = new Set(expired.map((order) => order.id));
+  ordersState.orders = ordersState.orders.filter((order) => !ids.has(order.id));
+  return expired.length;
+}
+
 async function renderOrders(snapshot) {
   const header = (actions = '') => `<div class="page-heading"><div><h1>Mes Commandes</h1><p>Les demandes envoyées depuis le lien public de commande.</p></div><div class="heading-actions">${actions}</div></div>`;
   if (!supabaseReady()) {
@@ -982,6 +1228,7 @@ async function renderOrders(snapshot) {
   let error = null;
   try {
     await loadOrders({ force: true });
+    await purgeTrash();
   } catch (requestError) {
     error = requestError.message;
   }
@@ -994,16 +1241,18 @@ async function renderOrders(snapshot) {
   const orders = ordersState.orders;
   const pending = orders.filter((order) => order.status === 'en_attente');
   const validated = orders.filter((order) => order.status === 'validee');
-  const refused = orders.filter((order) => order.status === 'refusee');
-  const liveStock = sum(snapshot.bands.filter((band) => band.status !== 'closed'), (band) => activeBirds(band, snapshot));
+  const refused = orders.filter((order) => order.status === 'refusee')
+    .sort((a, b) => String(b.handled_at || b.created_at || '').localeCompare(String(a.handled_at || a.created_at || '')));
+  const open = [...pending].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const liveStock = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
   const publicStock = ordersState.publicStock ? Math.max(0, Number(ordersState.publicStock.stock_heads) || 0) : null;
-  const rows = orders.map((order) => {
+  const rows = open.map((order) => {
     const total = (Number(order.quantity) || 0) * (Number(order.price_per_head) || 0);
-    const statusClass = order.status === 'en_attente' ? 'warning' : order.status === 'refusee' ? 'danger' : '';
+    const statusClass = order.status === 'en_attente' ? 'warning' : '';
     const actions = order.status === 'en_attente'
       ? `<button class="primary-button" type="button" data-action="validate-order" data-order-id="${esc(order.id)}">Valider</button><button class="secondary-button danger-outline" type="button" data-action="refuse-order" data-order-id="${esc(order.id)}">Refuser</button>`
       : order.handled_at
-        ? `<span class="orders-handled">${dateLabel(String(order.handled_at).slice(0, 10))}</span>`
+        ? `<span class="orders-handled">Traitée le ${dateLabel(String(order.handled_at).slice(0, 10))}</span>`
         : '—';
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
@@ -1016,6 +1265,18 @@ async function renderOrders(snapshot) {
       <td class="orders-table-actions">${actions}</td>
     </tr>`;
   }).join('');
+  const trashRows = refused.map((order) => {
+    const total = (Number(order.quantity) || 0) * (Number(order.price_per_head) || 0);
+    return `<tr>
+      <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
+      <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
+      <td>${esc(order.neighborhood)}</td>
+      <td>${number(order.quantity)}</td>
+      <td>${currency(total)}</td>
+      <td>${order.handled_at ? dateLabel(String(order.handled_at).slice(0, 10)) : '—'}</td>
+      <td><span class="status-pill danger">${trashCountdown(order)}</span></td>
+    </tr>`;
+  }).join('');
   const actions = `<button class="secondary-button" type="button" data-action="copy-order-link">Copier le lien public</button>
     <a class="secondary-button" href="./commander.html" target="_blank" rel="noopener">Ouvrir la page</a>
     <button class="secondary-button" type="button" data-action="publish-stock">Publier le stock</button>
@@ -1023,27 +1284,25 @@ async function renderOrders(snapshot) {
   return `${header(actions)}
     <section class="metrics-grid">
       ${metricCard('En attente', number(pending.length), 'À traiter', 'orders', pending.length ? 'low-stock' : '')}
-      ${metricCard('Validées', number(validated.length), 'Stock déduit', 'bird', 'positive')}
-      ${metricCard('Refusées', number(refused.length), 'Sans impact sur le stock', 'orders')}
+      ${metricCard('Validées', number(validated.length), 'Basculées dans les ventes', 'bird', 'positive')}
+      ${metricCard('Corbeille', number(refused.length), 'Purge automatique après 72 h', 'expenses')}
       ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
     ${error ? `<p class="orders-error">Impossible de rafraîchir les commandes : ${esc(error)}</p>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes reçues</h2><p>${orders.length} commande${orders.length > 1 ? 's' : ''} · stock actuel de l’élevage : ${number(liveStock)} sujets</p></div></div>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes à traiter</h2><p>${open.length} commande${open.length > 1 ? 's' : ''} en attente · les commandes validées rejoignent automatiquement l’onglet Ventes.</p></div></div>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Prix / tête</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : emptyState('Aucune commande pour le moment', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>`;
+      : emptyState('Aucune commande en attente', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>
+    <section class="panel table-panel trash-panel"><div class="panel-header"><div><h2>Corbeille des commandes refusées</h2><p>Les commandes refusées sont conservées 72 heures, puis supprimées automatiquement.</p></div>
+      ${refused.length ? '<button class="secondary-button danger-outline" type="button" data-action="empty-trash">Vider la corbeille</button>' : ''}</div>
+    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
+      : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refusées apparaîtront ici avant leur suppression définitive.</p></div>'}</section>`;
 }
 
 async function handleAction(action, button = null) {
   if (action === 'new-band') openBandForm();
   else if (action === 'edit-band') { if (button?.dataset?.bandId) await openBandForm(button.dataset.bandId); }
-  else if (action === 'delete-band') {
-    const id = button?.dataset?.bandId;
-    if (id && confirm('Supprimer cette bande ?')) {
-      await deleteRecord('bands', id);
-      toast('Bande supprimée.');
-      await render();
-    }
-  }
+  else if (action === 'archive-band') { if (button?.dataset?.bandId) await archiveBand(button.dataset.bandId); }
+  else if (action === 'restore-band') { if (button?.dataset?.bandId) await restoreBand(button.dataset.bandId); }
   else if (action === 'delete-band-history') {
     const id = button?.dataset?.bandId;
     if (id && confirm('Supprimer tout l’historique (relevés) de cette bande ?')) {
@@ -1054,6 +1313,11 @@ async function handleAction(action, button = null) {
   }
   else if (action === 'show-credits') await openCreditsDialog();
   else if (action === 'download-receipt') { if (button?.dataset?.saleId) downloadReceipt(button.dataset.saleId, button); }
+  else if (action === 'delete-sale') { if (button?.dataset?.saleId) await deleteSales([button.dataset.saleId]); }
+  else if (action === 'delete-selected-sales') {
+    const ids = $$('[data-sale-check]:checked').map((node) => node.dataset.saleCheck);
+    await deleteSales(ids);
+  }
   else if (action === 'record-credit-payment') { if (button?.dataset?.saleId) await recordCreditPayment(button.dataset.saleId, button); }
   else if (action === 'new-daily') await openDailyForm();
   else if (action === 'new-sale') await openSaleForm();
@@ -1061,6 +1325,7 @@ async function handleAction(action, button = null) {
   else if (action === 'refresh-orders') { await loadOrders({ force: true }).catch((error) => toast(error.message, true)); await render(); }
   else if (action === 'publish-stock') await publishStock();
   else if (action === 'copy-order-link') await copyOrderLink();
+  else if (action === 'empty-trash') await emptyTrash();
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
   else if (action === 'settings') toast('Paramètres locaux uniquement.');
@@ -1106,6 +1371,16 @@ async function main() {
   });
   document.addEventListener('click', routeEvent);
   $('#main-nav').addEventListener('keydown', handleTabKeydown);
+  $('#page-container').addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.id === 'sales-select-all') {
+      $$('[data-sale-check]').forEach((node) => { node.checked = target.checked; });
+      updateSalesSelection();
+    } else if (target.matches('[data-sale-check]')) {
+      updateSalesSelection();
+    }
+  });
   $('#dialog-content').addEventListener('submit', (event) => {
     handleSubmit(event).catch((error) => toast(error.message || 'Échec de l’enregistrement.', true));
   });

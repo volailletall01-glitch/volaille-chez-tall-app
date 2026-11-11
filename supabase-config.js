@@ -7,5 +7,5 @@ window.SUPABASE_CONFIG = {
   url: 'https://avoktrlsmbnisxxvxogc.supabase.co',
   anonKey: 'sb_publishable_D637PCwufh33LbqhXoPsRQ_9EBvT1sa',
   minPrice: 2500,
-  maxPrice: 4500,
+  maxPrice: 25000,
 };

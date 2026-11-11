@@ -2,7 +2,7 @@
   const config = window.SUPABASE_CONFIG || {};
   const $ = (selector) => document.querySelector(selector);
   const MIN_PRICE = Number(config.minPrice) || 2500;
-  const MAX_PRICE = Number(config.maxPrice) || 4500;
+  const MAX_PRICE = Number(config.maxPrice) || 25000;
   const REFRESH_MS = 20000;
   const ORDER_KEY = 'poulet-suivi-commande';
   const state = { stock: null, busy: false, timer: null, thanks: false, order: null };
