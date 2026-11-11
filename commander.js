@@ -4,7 +4,8 @@
   const MIN_PRICE = Number(config.minPrice) || 2500;
   const MAX_PRICE = Number(config.maxPrice) || 4500;
   const REFRESH_MS = 20000;
-  const state = { stock: null, busy: false, timer: null, thanks: false };
+  const ORDER_KEY = 'poulet-suivi-commande';
+  const state = { stock: null, busy: false, timer: null, thanks: false, order: null };
 
   const money = (value) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value) || 0)} FCFA`;
   const amount = (value) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value) || 0)}`;
@@ -36,6 +37,83 @@
     $('#form-card').hidden = !form;
     $('#soldout-card').hidden = !soldout;
     $('#unavailable-card').hidden = !unavailable;
+  }
+
+  function saveOrder() {
+    try {
+      if (state.order) localStorage.setItem(ORDER_KEY, JSON.stringify(state.order));
+      else localStorage.removeItem(ORDER_KEY);
+    } catch {
+      /* stockage local indisponible : le suivi reste affiché pour la visite en cours */
+    }
+  }
+
+  function readOrder() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ORDER_KEY) || 'null');
+      if (!saved || !saved.id) return null;
+      const done = saved.status === 'validee' || saved.status === 'refusee';
+      const age = Date.now() - new Date(saved.created_at || 0).getTime();
+      if (done && age > 7 * 24 * 3600 * 1000) {
+        localStorage.removeItem(ORDER_KEY);
+        return null;
+      }
+      return saved;
+    } catch {
+      return null;
+    }
+  }
+
+  function recapLine(order) {
+    const parts = [];
+    if (order.quantity) parts.push(`${amount(order.quantity)} poulet${Number(order.quantity) > 1 ? 's' : ''}`);
+    if (order.price_per_head) parts.push(`${money(order.price_per_head)} par tête`);
+    if (order.neighborhood) parts.push(`livraison à ${order.neighborhood}`);
+    if (order.created_at) {
+      parts.push(`commande du ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(order.created_at))}`);
+    }
+    return parts.join(' · ');
+  }
+
+  function renderTrack({ highlight = false } = {}) {
+    const card = $('#track-card');
+    if (!card) return;
+    const order = state.order;
+    if (!order) { card.hidden = true; return; }
+    const status = order.status === 'validee' ? 'validee' : order.status === 'refusee' ? 'refusee' : 'en_attente';
+    const first = String(order.client_name || '').trim().split(/\s+/)[0];
+    card.hidden = false;
+    card.dataset.state = status;
+    if (status === 'validee') {
+      $('#track-badge').textContent = 'Commande confirmée';
+      $('#track-title').textContent = first ? `Merci infiniment, ${first} !` : 'Merci infiniment !';
+      $('#track-text').textContent = `Votre commande est confirmée. Merci de votre confiance : nous vous contactons très vite pour organiser la livraison${order.neighborhood ? ` à ${order.neighborhood}` : ''}.`;
+    } else if (status === 'refusee') {
+      $('#track-badge').textContent = 'Commande non retenue';
+      $('#track-title').textContent = 'Nous sommes désolés';
+      $('#track-text').textContent = 'Votre commande n’a pas pu être acceptée : le stock disponible ne nous permettait pas de la satisfaire. Merci de votre compréhension et à très bientôt.';
+    } else {
+      $('#track-badge').textContent = 'Suivi de commande';
+      $('#track-title').textContent = 'Commande en traitement';
+      $('#track-text').textContent = 'Veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande.';
+    }
+    $('#track-recap').textContent = recapLine(order);
+    if (highlight) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function refreshOrder() {
+    const order = state.order;
+    if (!order || !order.id || order.status === 'validee' || order.status === 'refusee') return;
+    try {
+      const rows = await request(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}&select=id,status,handled_at`);
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row || row.status === order.status) return;
+      state.order = { ...order, status: row.status, handled_at: row.handled_at };
+      saveOrder();
+      renderTrack({ highlight: true });
+    } catch (error) {
+      console.error('Suivi de commande indisponible', error);
+    }
   }
 
   function renderStock() {
@@ -157,11 +235,12 @@
     submit.textContent = 'Envoi en cours…';
     setHint('');
     try {
-      await request('/rest/v1/orders', {
+      const rows = await request('/rest/v1/orders', {
         method: 'POST',
-        headers: { Prefer: 'return=minimal' },
+        headers: { Prefer: 'return=representation' },
         body: JSON.stringify(values),
       });
+      const created = Array.isArray(rows) ? rows[0] : null;
       const total = values.quantity * values.price_per_head;
       form.reset();
       updateTotal();
@@ -169,9 +248,17 @@
       $('#thanks-message').textContent = 'Votre commande a bien été reçue. Nous vous contactons très vite pour confirmer la livraison.';
       $('#thanks-recap').textContent = `${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''} · ${money(values.price_per_head)} par tête · total estimé ${money(total)} · livraison à ${values.neighborhood} · ${values.client_phone}`;
       state.thanks = true;
+      state.order = {
+        ...values,
+        id: created?.id || null,
+        status: created?.status || 'en_attente',
+        created_at: created?.created_at || new Date().toISOString(),
+      };
+      saveOrder();
       $('#form-card').hidden = true;
       $('#thanks-card').hidden = false;
       $('#thanks-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      renderTrack();
       setHint('');
       loadStock({ silent: true });
     } catch (error) {
@@ -187,6 +274,7 @@
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(() => {
       if (!state.busy) loadStock({ silent: true });
+      refreshOrder();
     }, REFRESH_MS);
   }
 
@@ -204,11 +292,17 @@
       $('#order-name').focus();
       loadStock({ silent: true });
     });
+    state.order = readOrder();
+    renderTrack();
+    refreshOrder();
     updateTotal();
     loadStock();
     startRefresh();
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') loadStock({ silent: true });
+      if (document.visibilityState === 'visible') {
+        loadStock({ silent: true });
+        refreshOrder();
+      }
     });
   }
 

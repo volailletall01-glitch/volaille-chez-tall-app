@@ -57,6 +57,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - **Lien public de commande** (`commander.html`) à partager aux clients : stock de poulets disponibles et fourchette de prix (2 500 – 4 500 FCFA) affichés en temps réel.
 - Si le stock est épuisé, le formulaire est remplacé par le message « Désolé, le stock est actuellement épuisé. »
 - Le client saisit nom et prénom, téléphone, quartier, quantité et prix par tête proposé. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
+- En bas de la page, un grand bandeau suit la commande : « Commande en traitement — veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande ». Dès que le gérant valide, il devient un message de confirmation et de remerciement (et un message d’excuse si la commande est refusée). Le suivi reste visible si le client revient plus tard sur le même appareil.
 - Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (statut Validée, quantité déduite du stock de l’élevage et stock public réactualisé) et bouton **Refuser** (statut Refusée, sans impact sur le stock) qui prépare un message d’excuse à envoyer sur WhatsApp.
 - Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 

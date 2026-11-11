@@ -301,6 +301,29 @@ tbody tr:hover { background: #fcfdfc; }
 .order-soldout-icon { background: var(--red-bg); color: var(--red); }
 .order-thanks-recap { max-width: 440px; margin: 12px auto 18px; color: var(--muted); font-size: 10px; line-height: 1.65; }
 
+/* Suivi de la commande, en bas de la page publique */
+.order-track {
+  margin-top: 18px; padding: clamp(22px, 4vw, 34px) clamp(18px, 4vw, 32px);
+  display: grid; justify-items: center; gap: 9px; text-align: center;
+  border: 1px solid #f0d9ab; border-radius: 16px; background: var(--amber-bg);
+}
+.order-track[data-state="validee"] { border-color: #b9dcc6; background: var(--green-100); }
+.order-track[data-state="refusee"] { border-color: #f0d7d4; background: var(--red-bg); }
+.order-track-badge {
+  padding: 5px 11px; border-radius: 20px; background: rgba(167, 107, 20, 0.13);
+  color: var(--amber); font-size: 9px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
+}
+.order-track[data-state="validee"] .order-track-badge { background: rgba(23, 107, 69, 0.13); color: var(--green-800); }
+.order-track[data-state="refusee"] .order-track-badge { background: rgba(189, 77, 67, 0.13); color: var(--red); }
+.order-track-title { margin: 0; color: #8a5a12; font: 800 clamp(25px, 5.4vw, 38px)/1.15 'Manrope', sans-serif; }
+.order-track[data-state="validee"] .order-track-title { color: var(--green-800); }
+.order-track[data-state="refusee"] .order-track-title { color: var(--red); }
+.order-track-text { max-width: 640px; margin: 0; color: #6f5426; font-size: clamp(12px, 2.4vw, 15px); line-height: 1.6; }
+.order-track[data-state="validee"] .order-track-text { color: #2f5c45; }
+.order-track[data-state="refusee"] .order-track-text { color: #8f3f38; }
+.order-track-recap { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.order-track-recap:empty { display: none; }
+
 .order-footer {
   max-width: 1040px; margin: 0 auto; padding: 16px clamp(16px, 4vw, 44px) 34px;
   display: flex; justify-content: space-between; gap: 12px; color: #98a19a; font-size: 9px;
