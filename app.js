@@ -309,6 +309,31 @@ function phoneFromIdentifier(email) {
   return email && email.endsWith(`@${PHONE_DOMAIN}`) ? email.split('@')[0] : null;
 }
 
+function normalizeWhatsAppNumber(raw, { required = true } = {}) {
+  const value = String(raw || '').trim();
+  if (!value) {
+    if (required) throw new Error('Entrez votre numéro WhatsApp.');
+    return '';
+  }
+  const compact = value.replace(/[^\d+]/g, '');
+  if (!/^\+?\d{8,16}$/.test(compact)) {
+    throw new Error('Numéro WhatsApp invalide. Utilisez le format international, ex. +223 78 31 48 18.');
+  }
+  let digits = compact.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = digits.replace(/^0+/, '');
+  if (digits.length === 8) digits = `223${digits}`;
+  if (digits.length < 10 || digits.length > 15) {
+    throw new Error('Numéro WhatsApp invalide. Indiquez l’indicatif pays, ex. +223 78 31 48 18.');
+  }
+  return digits;
+}
+
+function formatWhatsAppNumber(digits) {
+  const value = String(digits || '').replace(/\D/g, '');
+  return value ? `+${value}` : '';
+}
+
 async function signInWithIdentifier(identifier, password) {
   const email = normalizeIdentifier(identifier);
   const payload = await authRequest('/auth/v1/token?grant_type=password', {
@@ -319,42 +344,87 @@ async function signInWithIdentifier(identifier, password) {
   return session;
 }
 
-async function signUpWithIdentifier(identifier, password, displayName) {
+async function signUpWithIdentifier(identifier, password, whatsapp) {
   const email = normalizeIdentifier(identifier);
+  const normalizedWhatsApp = normalizeWhatsAppNumber(whatsapp);
   const payload = await authRequest('/auth/v1/signup', {
     body: {
       email,
       password,
-      data: { display_name: displayName || '', phone: phoneFromIdentifier(email) || '' },
+      data: { phone: phoneFromIdentifier(email) || normalizedWhatsApp, whatsapp: normalizedWhatsApp },
     },
   });
   if (!payload?.access_token) {
     throw new Error('Compte créé. La confirmation par email est encore active : validez le lien reçu puis reconnectez-vous.');
   }
   storeSession(payload);
-  await upsertProfile(displayName);
+  const saved = await upsertProfile('', normalizedWhatsApp);
+  if (saved) await publishManagerWhatsApp(normalizedWhatsApp);
   return session;
 }
 
-async function upsertProfile(displayName = '') {
-  if (!session?.user?.id) return;
+async function upsertProfile(displayName = '', whatsapp = '') {
+  if (!session?.user?.id) return false;
   const email = session.user.email || '';
   const payload = {
     id: session.user.id,
     email,
-    phone: phoneFromIdentifier(email) || '',
+    phone: phoneFromIdentifier(email) || whatsapp || '',
     display_name: displayName || session.user.user_metadata?.display_name || '',
     updated_at: new Date().toISOString(),
   };
+  if (whatsapp) payload.whatsapp = whatsapp;
   try {
     await apiRequest('/rest/v1/profiles?on_conflict=id', {
       method: 'POST',
       body: payload,
       prefer: 'resolution=merge-duplicates,return=minimal',
     });
+    return true;
   } catch (error) {
     console.warn('Profil non synchronisé', error);
+    return false;
   }
+}
+
+async function loadProfileWhatsApp() {
+  if (!session?.user?.id) return '';
+  try {
+    const rows = await apiRequest(`/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=whatsapp`);
+    const value = Array.isArray(rows) && rows[0] ? rows[0].whatsapp : '';
+    return String(value || '').replace(/\D/g, '');
+  } catch (error) {
+    console.warn('Numéro WhatsApp du profil illisible', error);
+    return '';
+  }
+}
+
+async function publishManagerWhatsApp(whatsapp) {
+  const digits = String(whatsapp || '').replace(/\D/g, '');
+  if (!digits) return false;
+  try {
+    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=manager_whatsapp');
+    const current = Array.isArray(rows) && rows[0]
+      ? String(rows[0].manager_whatsapp || '').replace(/\D/g, '')
+      : '';
+    if (current === digits) return true;
+    await supabaseRequest('/rest/v1/app_config?id=eq.1', {
+      method: 'PATCH',
+      body: { manager_whatsapp: digits },
+      headers: { Prefer: 'return=minimal' },
+    });
+    return true;
+  } catch (error) {
+    console.warn('Numéro WhatsApp du gestionnaire non publié', error);
+    return false;
+  }
+}
+
+async function syncManagerWhatsApp() {
+  const whatsapp = await loadProfileWhatsApp();
+  if (!whatsapp) return '';
+  await publishManagerWhatsApp(whatsapp);
+  return whatsapp;
 }
 
 async function signOut() {
@@ -414,6 +484,26 @@ function cleanRecord(storeName, record) {
   return payload;
 }
 
+async function cacheRemoteSnapshot() {
+  if (!session?.user?.id) return;
+  const snapshotData = {
+    tables: remoteCache,
+    settings: remoteSettings,
+  };
+  if (db) {
+    try {
+      await localWriteMeta(`remote-snapshot:${session.user.id}`, snapshotData);
+    } catch (error) {
+      console.warn('Cache local IndexedDB indisponible', error);
+    }
+  }
+  try {
+    localStorage.setItem(`remote-snapshot:${session.user.id}`, JSON.stringify(snapshotData));
+  } catch (error) {
+    /* stockage LocalStorage saturé ou restreint par WebKit */
+  }
+}
+
 async function loadRemoteData({ silent = false } = {}) {
   if (!session?.access_token) throw new Error('Vous devez être connecté.');
   const queries = REMOTE_TABLES.map((table) => apiRequest(`/rest/v1/${table}?select=*`));
@@ -425,6 +515,7 @@ async function loadRemoteData({ silent = false } = {}) {
   remoteSettings = {};
   (settings || []).forEach((row) => { remoteSettings[row.key] = row.value; });
   dataLoaded = true;
+  await cacheRemoteSnapshot();
   if (!silent) console.info('Données synchronisées', REMOTE_TABLES.map((table) => `${table}:${remoteCache[table].length}`).join(' '));
   return getSnapshot();
 }
@@ -445,6 +536,7 @@ async function writeMeta(key, value) {
     prefer: 'resolution=merge-duplicates,return=minimal',
   });
   remoteSettings[key] = value;
+  await cacheRemoteSnapshot();
   return value;
 }
 
@@ -462,6 +554,7 @@ async function saveRecords(entries) {
     if (index >= 0) list[index] = row; else list.push(row);
     saved.push(row);
   }
+  await cacheRemoteSnapshot();
   return saved;
 }
 
@@ -474,6 +567,7 @@ async function deleteRecord(storeName, id) {
   if (!id) return;
   await apiRequest(`/rest/v1/${storeName}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
   remoteCache[storeName] = (remoteCache[storeName] || []).filter((item) => item.id !== id);
+  await cacheRemoteSnapshot();
 }
 
 async function deleteRecords(storeName, ids) {
@@ -482,6 +576,7 @@ async function deleteRecords(storeName, ids) {
   const filter = unique.join(',');
   await apiRequest(`/rest/v1/${storeName}?id=in.(${filter})`, { method: 'DELETE' });
   remoteCache[storeName] = (remoteCache[storeName] || []).filter((item) => !unique.includes(item.id));
+  await cacheRemoteSnapshot();
 }
 
 async function deleteLogsForBand(bandId) {
@@ -493,10 +588,37 @@ async function deleteRecordsByBand(storeName, bandId) {
   if (!bandId) return;
   await apiRequest(`/rest/v1/${storeName}?batch_id=eq.${encodeURIComponent(bandId)}`, { method: 'DELETE' });
   remoteCache[storeName] = (remoteCache[storeName] || []).filter((record) => record.batch_id !== bandId);
+  await cacheRemoteSnapshot();
 }
 
 async function getSnapshot() {
-  if (!dataLoaded) await loadRemoteData();
+  if (!dataLoaded) {
+    try {
+      await loadRemoteData();
+    } catch (error) {
+      let cached = null;
+      try {
+        if (db && session?.user?.id) cached = await localReadMeta(`remote-snapshot:${session.user.id}`);
+      } catch (cacheError) {
+        console.warn('Cache local IndexedDB illisible', cacheError);
+      }
+      if (!cached && session?.user?.id) {
+        try {
+          const raw = localStorage.getItem(`remote-snapshot:${session.user.id}`);
+          if (raw) cached = JSON.parse(raw);
+        } catch (storageError) {
+          console.warn('Cache LocalStorage de secours illisible', storageError);
+        }
+      }
+      if (!cached?.tables) throw error;
+      REMOTE_TABLES.forEach((table) => {
+        remoteCache[table] = Array.isArray(cached.tables[table]) ? cached.tables[table] : [];
+      });
+      remoteSettings = cached.settings || {};
+      dataLoaded = true;
+      console.warn('Mode hors ligne : affichage du dernier snapshot synchronisé.', error);
+    }
+  }
   return {
     bands: [...remoteCache.bands],
     logs: [...remoteCache.daily_logs],
@@ -1041,7 +1163,7 @@ function wrapWords(text, width) {
   return lines;
 }
 
-function buildReceiptPdf(sale, band) {
+function buildReceiptPdf(sale, band, options = {}) {
   const PAGE_WIDTH = 227;       // 80 mm
   const MARGIN = 9;
   const BASE_SIZE = 8;
@@ -1050,9 +1172,9 @@ function buildReceiptPdf(sale, band) {
   const MAX_CHARS = Math.floor(CONTENT_WIDTH / (BASE_SIZE * CHAR_RATIO));
   const LINE_HEIGHT = 1.32;
 
-  const total = Number(sale.total_amount) || 0;
-  const paid = Number(sale.paid_amount) || 0;
-  const due = Math.max(0, total - paid);
+  const total = options.total !== undefined ? Number(options.total) || 0 : Number(sale.total_amount) || 0;
+  const paid = options.paid !== undefined ? Number(options.paid) || 0 : Number(sale.paid_amount) || 0;
+  const due = options.due !== undefined ? Math.max(0, Number(options.due) || 0) : Math.max(0, total - paid);
   const heads = Number(sale.heads) || 0;
   const perHead = Number(sale.price_per_head) || 0;
   const weight = Number(sale.total_weight_kg) || 0;
@@ -1060,6 +1182,12 @@ function buildReceiptPdf(sale, band) {
   const payment = PAYMENT_LABELS[sale.payment_method] || 'Espèces';
   const client = sale.client_name || 'Vente comptoir';
   const receiptNo = String(sale.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || '—';
+  const title = options.title || 'TICKET DE CAISSE';
+  const note = options.note || 'Merci de votre confiance !';
+  const totalLabel = options.totalLabel || 'TOTAL';
+  const paidLabel = options.paidLabel || 'MONTANT RÉGLÉ';
+  const dueLabel = options.dueLabel || 'SOLDE RESTANT';
+  const dueZeroLabel = options.dueZeroLabel || 'SOLDÉ';
 
   const items = [];
   const addLine = (text = '', { bold = false, size = BASE_SIZE, align = 'left', gap = 0 } = {}) => {
@@ -1079,7 +1207,7 @@ function buildReceiptPdf(sale, band) {
   addLine('Kalaban Coura ACI — Bamako', { size: 8, align: 'center' });
   addLine('Tél : +223 78 31 48 18', { size: 8, align: 'center', gap: 2 });
   addRule('=');
-  addLine('TICKET DE CAISSE', { bold: true, size: 10, align: 'center' });
+  addLine(title, { bold: true, size: 10, align: 'center' });
   addLine(`Reçu n° ${receiptNo}`, { size: 7, align: 'center', gap: 1 });
   addLine('');
   addField('Date', dateLabel(sale.sale_date));
@@ -1101,12 +1229,14 @@ function buildReceiptPdf(sale, band) {
   }
   addLine('');
   addRule('=');
-  addPair('TOTAL', currency(total), { bold: true });
-  addPair('MONTANT RÉGLÉ', currency(paid));
-  addPair('SOLDE RESTANT', due > 0 ? currency(due) : 'SOLDÉ', { bold: due > 0 });
+  addPair(totalLabel, currency(total), { bold: true });
+  addPair(paidLabel, currency(paid));
+  addPair(dueLabel, due > 0 ? currency(due) : dueZeroLabel, { bold: due > 0 });
   addLine(`Règlement : ${payment}`, { gap: 2 });
   addRule('-');
-  addLine('Merci de votre confiance !', { bold: true, align: 'center', gap: 2 });
+  wrapWords(note, MAX_CHARS).forEach((line, index) => {
+    addLine(line, { bold: true, align: 'center', gap: index ? 0 : 2 });
+  });
   addLine('Vos poulets frais, de la ferme à votre table.', { size: 7, align: 'center' });
   addLine('Volaille chez TALL — Kalaban Coura ACI', { size: 7, align: 'center' });
   addLine('Tél : +223 78 31 48 18', { size: 7, align: 'center' });
@@ -1191,14 +1321,14 @@ function buildReceiptPdf(sale, band) {
   return result;
 }
 
-function generateReceipt(sale, band) {
-  const bytes = buildReceiptPdf(sale, band);
+function generateReceipt(sale, band, options = {}) {
+  const bytes = buildReceiptPdf(sale, band, options);
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.download = `recu-${safeName}-${sale.sale_date || 'vente'}.pdf`;
+  a.download = `${options.filenamePrefix || 'recu'}-${safeName}-${sale.sale_date || 'vente'}.pdf`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
@@ -1448,6 +1578,7 @@ async function handleSubmit(event) {
     if (key in values) values[key] = key === 'avg_weight_kg' && values[key] === '' ? null : Number(values[key]) || 0;
   }
   const base = { id: uid(), organization_id: await readMeta('organization_id'), created_at: new Date().toISOString() };
+  let followUp = null;
 
   if (formId === 'band-form') {
     const existing = values.id ? (await readAll('bands')).find((item) => item.id === values.id) : null;
@@ -1478,10 +1609,11 @@ async function handleSubmit(event) {
     const totalWeight = values.heads * values.unit_weight_kg;
     const totalAmount = totalWeight * values.price_per_kg;
     if (values.paid_amount > totalAmount) throw new Error('Le règlement ne peut pas dépasser le montant de la vente.');
-    await saveRecord('sales', {
+    const sale = await saveRecord('sales', {
       ...base, ...values, client_id: values.client_id || null,
       total_weight_kg: totalWeight, total_amount: totalAmount, payment_status: values.paid_amount >= totalAmount ? 'paid' : 'partial',
     });
+    followUp = { type: 'sale', sale, band };
   } else if (formId === 'charge-form') {
     await saveRecord('charges', { ...base, ...values, batch_id: values.batch_id || null });
   }
@@ -1489,6 +1621,7 @@ async function handleSubmit(event) {
   await render();
   toast('Enregistré et synchronisé sur votre compte.');
   publishStock({ silent: true }).catch((error) => console.error(error));
+  if (followUp?.type === 'sale') openDirectSaleDialog(followUp.sale, followUp.band);
 }
 
 function supabaseReady() {
@@ -1567,25 +1700,192 @@ async function refreshOrderBadge() {
   updateOrderBadge();
 }
 
-function whatsappLink(phone, message) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  const text = encodeURIComponent(message);
-  return digits.length >= 8 ? `https://wa.me/${digits}?text=${text}` : `https://wa.me/?text=${text}`;
+function whatsappNumber(phone) {
+  let digits = String(phone || '').replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.length === 8) digits = `223${digits}`;
+  else if (digits.length === 9 && digits.startsWith('0')) digits = `223${digits.slice(1)}`;
+  return digits;
 }
 
-function openRefusalDialog(order) {
-  const message = `Bonjour ${order.client_name}, nous sommes sincèrement désolés : votre commande de ${number(order.quantity)} poulet${Number(order.quantity) > 1 ? 's' : ''} n’a pas pu être acceptée. Le stock disponible ne nous permet pas de la satisfaire. Merci de votre compréhension et à très bientôt chez Volaille chez TALL.`;
-  setDialog('Commande refusée', 'Prévenez le client que sa commande n’a pas pu être acceptée.', `
-    <div class="dialog-form">
-      <p class="notice">La commande de <strong>${esc(order.client_name)}</strong> est refusée. Le stock n’a pas été modifié.</p>
-      <div class="field full"><label for="refusal-message">Message à envoyer au client</label><textarea id="refusal-message" rows="7">${esc(message)}</textarea></div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button><a class="primary-button" id="refusal-whatsapp" href="${esc(whatsappLink(order.client_phone, message))}" target="_blank" rel="noopener">Envoyer sur WhatsApp</a></div>
-    </div>`);
-  const textarea = $('#refusal-message');
-  const link = $('#refusal-whatsapp');
-  if (textarea && link) {
-    textarea.addEventListener('input', () => { link.href = whatsappLink(order.client_phone, textarea.value); });
+function whatsappLink(phone, message) {
+  const digits = whatsappNumber(phone);
+  const text = encodeURIComponent(message);
+  return digits.length >= 10 ? `https://wa.me/${digits}?text=${text}` : `https://wa.me/?text=${text}`;
+}
+
+function buildTransactionMessage({ status, clientName, items, total, paid, remaining, neighborhood, extra }) {
+  const lines = [
+    `Bonjour ${clientName},`,
+    '',
+    `Statut : ${status}`,
+    '',
+    'Détail de la transaction :',
+  ];
+  for (const item of items) {
+    const unit = Number(item.unitPrice) > 0 ? ` × ${currency(item.unitPrice)}` : '';
+    lines.push(`• ${item.label} : ${number(item.quantity)}${unit} = ${currency(item.total)}`);
   }
+  lines.push(
+    '',
+    `Total : ${currency(total)}`,
+    `Total payé : ${currency(paid)}`,
+    `Solde restant : ${currency(remaining)}`,
+  );
+  if (neighborhood) lines.push(`Livraison : ${neighborhood}`);
+  if (extra) lines.push('', extra);
+  lines.push('', 'Merci de votre confiance !', 'Volaille chez TALL');
+  return lines.join('\n');
+}
+
+function makeOrderReceipt(order, records) {
+  const heads = sum(records, (record) => Number(record.heads) || 0);
+  const totalWeight = sum(records, (record) => Number(record.total_weight_kg) || 0);
+  const total = sum(records, (record) => Number(record.total_amount) || 0);
+  const paid = sum(records, (record) => Number(record.paid_amount) || 0);
+  return {
+    id: order.id,
+    client_name: order.client_name,
+    client_phone: order.client_phone,
+    client_address: order.neighborhood,
+    sale_date: today(),
+    heads,
+    unit_weight_kg: heads ? totalWeight / heads : 0,
+    total_weight_kg: totalWeight,
+    price_per_kg: totalWeight ? Math.round(total / totalWeight) : 0,
+    price_per_head: Number(order.price_per_head) || (heads ? Math.round(total / heads) : 0),
+    total_amount: total,
+    paid_amount: paid,
+    payment_method: 'cash',
+    payment_status: paid >= total ? 'paid' : 'partial',
+    created_at: new Date().toISOString(),
+  };
+}
+
+function openTransactionDialog({
+  title, subtitle, clientName, clientPhone, status, items, total, paid, remaining,
+  neighborhood = '', extra = '', receipt, receiptBand = null, receiptOptions = {},
+}) {
+  const message = buildTransactionMessage({ status, clientName, items, total, paid, remaining, neighborhood, extra });
+  const lines = items.map((item) => `<div class="transaction-line"><span>${esc(item.label)} × ${number(item.quantity)}</span><span>${currency(item.total)}</span></div>`).join('');
+  setDialog(title, subtitle, `
+    <div class="dialog-form">
+      <div class="transaction-summary">
+        <strong>${esc(clientName)}${clientPhone ? ` · ${esc(clientPhone)}` : ''}</strong>
+        ${lines}
+        <div class="transaction-line"><span>Total payé</span><span>${currency(paid)}</span></div>
+        <div class="transaction-line"><span>Solde restant</span><span>${currency(remaining)}</span></div>
+      </div>
+      <div class="field full"><label for="transaction-message">Message WhatsApp</label><textarea id="transaction-message" rows="7">${esc(message)}</textarea></div>
+      <div class="transaction-actions">
+        <a class="primary-button" id="transaction-whatsapp" href="${esc(whatsappLink(clientPhone, message))}" target="_blank" rel="noopener">Envoyer par WhatsApp</a>
+        <button class="secondary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`);
+  const textarea = $('#transaction-message');
+  const link = $('#transaction-whatsapp');
+  if (textarea && link) {
+    textarea.addEventListener('input', () => { link.href = whatsappLink(clientPhone, textarea.value); });
+  }
+  $('#transaction-receipt')?.addEventListener('click', () => {
+    generateReceipt(receipt, receiptBand, receiptOptions);
+    toast('Reçu PDF téléchargé.');
+  });
+}
+
+function openAcceptedOrderDialog(order, records) {
+  const total = sum(records, (record) => Number(record.total_amount) || 0);
+  const paid = sum(records, (record) => Number(record.paid_amount) || 0);
+  const remaining = Math.max(0, total - paid);
+  openTransactionDialog({
+    title: 'Commande acceptée',
+    subtitle: 'Envoyez la confirmation au client ou téléchargez son reçu.',
+    clientName: order.client_name,
+    clientPhone: order.client_phone,
+    status: 'Commande acceptée ✅',
+    items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
+    total,
+    paid,
+    remaining,
+    neighborhood: order.neighborhood,
+    extra: remaining > 0 ? `Solde à régler à la livraison : ${currency(remaining)}.` : 'Commande entièrement réglée.',
+    receipt: makeOrderReceipt(order, records),
+    receiptBand: { name: 'Commande publique' },
+    receiptOptions: { title: 'COMMANDE CONFIRMÉE' },
+  });
+}
+
+function openRefusedOrderDialog(order) {
+  const total = (Number(order.quantity) || 0) * (Number(order.price_per_head) || 0);
+  const receipt = {
+    id: order.id,
+    client_name: order.client_name,
+    client_phone: order.client_phone,
+    client_address: order.neighborhood,
+    sale_date: String(order.created_at || '').slice(0, 10) || today(),
+    heads: Number(order.quantity) || 0,
+    unit_weight_kg: 0,
+    total_weight_kg: 0,
+    price_per_kg: 0,
+    price_per_head: Number(order.price_per_head) || 0,
+    total_amount: total,
+    paid_amount: 0,
+    payment_method: 'cash',
+    payment_status: 'unpaid',
+    created_at: order.created_at || new Date().toISOString(),
+  };
+  openTransactionDialog({
+    title: 'Commande refusée',
+    subtitle: 'Prévenez le client et remettez-lui un justificatif.',
+    clientName: order.client_name,
+    clientPhone: order.client_phone,
+    status: 'Commande refusée',
+    items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
+    total,
+    paid: 0,
+    remaining: 0,
+    neighborhood: order.neighborhood,
+    extra: 'Le stock disponible ne nous permet pas de satisfaire cette commande. Aucun montant n’a été débité.',
+    receipt,
+    receiptBand: { name: 'Commande publique' },
+    receiptOptions: {
+      title: 'COMMANDE REFUSÉE',
+      total,
+      paid: 0,
+      due: 0,
+      totalLabel: 'MONTANT COMMANDÉ',
+      paidLabel: 'MONTANT VERSÉ',
+      dueLabel: 'MONTANT DÛ',
+      dueZeroLabel: 'AUCUN',
+      note: 'Aucun montant n’a été débité. Merci de votre compréhension.',
+      filenamePrefix: 'commande-refusee',
+    },
+  });
+}
+
+function openDirectSaleDialog(sale, band) {
+  const total = Number(sale.total_amount) || 0;
+  const paid = Number(sale.paid_amount) || 0;
+  const remaining = Math.max(0, total - paid);
+  const heads = Number(sale.heads) || 0;
+  const unitPrice = Number(sale.price_per_head) || (heads ? total / heads : 0);
+  openTransactionDialog({
+    title: 'Vente enregistrée',
+    subtitle: 'Envoyez le récapitulatif au client ou téléchargez le reçu.',
+    clientName: sale.client_name || 'Client comptoir',
+    clientPhone: sale.client_phone || '',
+    status: 'Vente enregistrée ✅',
+    items: [{ label: band?.name ? `Poulets — ${band.name}` : 'Poulets de chair', quantity: heads, unitPrice, total }],
+    total,
+    paid,
+    remaining,
+    neighborhood: sale.client_address || '',
+    extra: remaining > 0 ? `Solde à régler : ${currency(remaining)}.` : 'Vente entièrement réglée. Merci !',
+    receipt: sale,
+    receiptBand: band,
+    receiptOptions: { title: 'TICKET DE CAISSE' },
+  });
 }
 
 async function validateOrder(orderId, button) {
@@ -1654,6 +1954,7 @@ async function validateOrder(orderId, button) {
     toast(`Commande validée : ${number(order.quantity)} sujets déduits du stock.`);
     await publishStock({ silent: true }).catch((error) => console.error(error));
     await render();
+    openAcceptedOrderDialog(order, created.map((entry) => entry.record));
   } catch (error) {
     toast(error.message || 'Validation impossible.', true);
   } finally {
@@ -1676,7 +1977,7 @@ async function refuseOrder(orderId, button) {
     order.handled_at = new Date().toISOString();
     ordersState.lastFetch = 0;
     await render();
-    openRefusalDialog(order);
+    openRefusedOrderDialog(order);
   } catch (error) {
     toast(error.message || 'Refus impossible.', true);
   } finally {
@@ -1912,6 +2213,7 @@ function updateAccountUI() {
 async function openAccountDialog() {
   if (!session) return;
   const snapshot = await getSnapshot();
+  const whatsapp = await loadProfileWhatsApp();
   const address = session.user.email || '';
   const identifier = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : address;
   const body = `
@@ -1924,16 +2226,42 @@ async function openAccountDialog() {
         ${metricCard('Ventes', number(snapshot.sales.length), 'Toutes périodes', 'sales')}
         ${metricCard('Charges', number(snapshot.charges.length), 'Toutes périodes', 'expenses')}
       </div>
-      <p class="account-note">Ces données sont stockées sur votre compte et se retrouvent automatiquement sur chaque appareil connecté.</p>
+      <div class="field full">
+        <label for="account-whatsapp">Numéro WhatsApp du gestionnaire</label>
+        <input id="account-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" value="${esc(formatWhatsAppNumber(whatsapp))}" placeholder="+223 78 31 48 18" aria-describedby="account-whatsapp-hint" />
+        <small class="field-hint" id="account-whatsapp-hint">Chaque nouvelle commande publique envoie une alerte à ce numéro.</small>
+      </div>
       <div class="dialog-actions" style="justify-content:space-between">
         <button class="secondary-button danger-outline" type="button" data-action="logout">Se déconnecter</button>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
-          <button class="primary-button" type="button" data-close-dialog>Fermer</button>
+          <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le numéro</button>
+          <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
         </div>
       </div>
     </div>`;
   setDialog('Mon compte', 'Synchronisation multi-appareils sécurisée.', body);
+}
+
+async function saveAccountWhatsApp(button) {
+  if (!session) return;
+  const input = $('#account-whatsapp');
+  try {
+    const digits = normalizeWhatsAppNumber(input?.value || '');
+    if (button) button.disabled = true;
+    const saved = await upsertProfile(session.user.user_metadata?.display_name || '', digits);
+    if (!saved) throw new Error('Enregistrement du profil impossible. Vérifiez votre connexion.');
+    const published = await publishManagerWhatsApp(digits);
+    closeDialog();
+    await openAccountDialog();
+    toast(published
+      ? 'Numéro WhatsApp enregistré et publié pour les commandes.'
+      : 'Numéro enregistré. Publication publique impossible pour le moment.', !published);
+  } catch (error) {
+    toast(error.message || 'Numéro WhatsApp invalide.', true);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 async function syncNow() {
@@ -1963,13 +2291,16 @@ function bindAuthUI() {
     if (!supabaseReady()) { setAuthError('Supabase n’est pas configuré.'); return; }
     const identifier = $('#auth-identifier')?.value.trim() || '';
     const password = $('#auth-password')?.value || '';
-    const displayName = $('#auth-name')?.value.trim() || '';
+    const whatsapp = $('#auth-whatsapp')?.value.trim() || '';
     setAuthError('');
     if (!identifier) { setAuthError('Entrez votre email ou votre numéro de téléphone.'); return; }
     if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
+    if (authMode === 'signup') {
+      try { normalizeWhatsAppNumber(whatsapp); } catch (error) { setAuthError(error.message); return; }
+    }
     authBusy(true);
     try {
-      if (authMode === 'signup') await signUpWithIdentifier(identifier, password, displayName);
+      if (authMode === 'signup') await signUpWithIdentifier(identifier, password, whatsapp);
       else await signInWithIdentifier(identifier, password);
       const passwordInput = $('#auth-password');
       if (passwordInput) passwordInput.value = '';
@@ -2010,6 +2341,7 @@ async function startApp() {
   await setPage(initialPage);
   refreshOrderBadge();
   if (supabaseReady()) {
+    syncManagerWhatsApp().catch((error) => console.error(error));
     getSnapshot()
       .then((snapshot) => {
         if (!snapshot.bands.length) return null;
@@ -2054,6 +2386,7 @@ async function handleAction(action, button = null) {
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
   else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }
   else if (action === 'account' || action === 'settings') await openAccountDialog();
+  else if (action === 'save-whatsapp') await saveAccountWhatsApp(button);
   else if (action === 'sync-now') await syncNow().catch((error) => toast(error.message || 'Synchronisation impossible.', true));
   else if (action === 'logout') await logout();
 }
@@ -2090,7 +2423,42 @@ function handleTabKeydown(event) {
     .catch((error) => toast(error.message || 'Impossible d’ouvrir cette section.', true));
 }
 
+const IOS_INSTALL_KEY = 'volaille-ios-install-dismissed-v1';
+
+function isIosDevice() {
+  const ua = navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod/.test(ua)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isStandaloneMode() {
+  return window.navigator.standalone === true
+    || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+function setupIosInstallGuide() {
+  const banner = $('#ios-install');
+  if (!banner || !isIosDevice() || isStandaloneMode()) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(IOS_INSTALL_KEY) === '1'; } catch (error) { /* stockage purgé */ }
+  if (dismissed) return;
+  banner.hidden = false;
+  banner.querySelector('[data-dismiss-ios-install]')?.addEventListener('click', () => {
+    banner.hidden = true;
+    try { localStorage.setItem(IOS_INSTALL_KEY, '1'); } catch (error) { /* stockage purgé */ }
+  });
+}
+
+async function requestPersistentStorage() {
+  try {
+    if (navigator.storage?.persist) await navigator.storage.persist();
+  } catch (error) {
+    console.warn('Stockage persistant non accordé', error);
+  }
+}
+
 async function main() {
+  await requestPersistentStorage();
   try {
     db = await openDatabase();
   } catch (error) {
@@ -2098,6 +2466,7 @@ async function main() {
     db = null;
   }
   await preloadLogo();
+  setupIosInstallGuide();
   document.querySelectorAll('[data-icon]').forEach((node) => {
     if (ICONS[node.dataset.icon]) node.innerHTML = icon(node.dataset.icon);
   });

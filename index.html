@@ -6,16 +6,29 @@
     <meta name="theme-color" content="#f5f7f2" />
     <meta name="description" content="Gestion d’élevage, de ventes et de charges de poulets de chair." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Volaille chez TALL" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="icon" href="./icons/volaille-chez-tall-192.png" type="image/png" sizes="192x192" />
-    <link rel="apple-touch-icon" href="./icons/volaille-chez-tall-180.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/volaille-chez-tall-180.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="./icons/volaille-chez-tall-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preload" as="image" href="./icons/volaille-chez-tall-512.png" imagesrcset="./icons/volaille-chez-tall-logo.png 96w, ./icons/volaille-chez-tall-192.png 192w, ./icons/volaille-chez-tall-512.png 512w" imagesizes="(max-width: 480px) 88px, 104px" fetchpriority="high" />
     <link rel="stylesheet" href="./styles.css" />
     <title>Volaille chez TALL — Gestion avicole</title>
   </head>
   <body>
+    <div class="ios-install" id="ios-install" role="dialog" aria-live="polite" aria-label="Installer l’application sur l’écran d’accueil" hidden>
+      <div class="ios-install-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 16V3m0 0 4 4m-4-4L8 7"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+      </div>
+      <div class="ios-install-copy">
+        <strong>Installer Volaille chez TALL</strong>
+        <p>Appuyez sur l’icône Partager de Safari, puis sur « Sur l’écran d’accueil ».</p>
+      </div>
+      <button class="ios-install-close" type="button" aria-label="Masquer ce conseil" data-dismiss-ios-install>×</button>
+    </div>
+
     <div class="auth-screen" id="auth-screen">
       <div class="auth-ambience" aria-hidden="true">
         <span class="auth-glow auth-glow-a"></span>
@@ -44,8 +57,9 @@
             <input id="auth-identifier" name="identifier" type="text" inputmode="email" autocomplete="username" placeholder="vous@exemple.com ou 78 00 00 00" required />
           </div>
           <div class="auth-field" data-signup-only hidden>
-            <label for="auth-name">Nom de l’exploitation (optionnel)</label>
-            <input id="auth-name" name="display_name" type="text" autocomplete="organization" maxlength="80" placeholder="Ex. Ferme TALL" />
+            <label for="auth-whatsapp">Numéro WhatsApp *</label>
+            <input id="auth-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="+223 78 31 48 18" aria-describedby="auth-whatsapp-hint" />
+            <small class="auth-field-hint" id="auth-whatsapp-hint">Format international requis. Les commandes seront envoyées à ce numéro.</small>
           </div>
           <div class="auth-field">
             <label for="auth-password">Mot de passe</label>

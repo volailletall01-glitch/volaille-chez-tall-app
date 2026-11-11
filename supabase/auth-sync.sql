@@ -15,6 +15,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   email text,
   phone text,
+  whatsapp text,
   display_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

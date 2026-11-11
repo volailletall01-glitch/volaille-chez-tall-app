@@ -1,4 +1,4 @@
-const CACHE_NAME = 'poulet-pro-shell-v41';
+const CACHE_NAME = 'poulet-pro-shell-v45';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,8 +14,30 @@ const APP_SHELL = [
   './icons/volaille-chez-tall-512.png',
 ];
 
+async function matchCache(request) {
+  try {
+    return await caches.match(request);
+  } catch {
+    return undefined;
+  }
+}
+
+async function cacheResponse(request, response) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response);
+  } catch {
+    return;
+  }
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => Promise.allSettled(APP_SHELL.map((url) => cache.add(url))))
+      .catch(() => undefined)
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -33,14 +55,15 @@ self.addEventListener('fetch', (event) => {
     fetch(request).then((response) => {
       if (response.ok) {
         const copy = response.clone();
-        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)));
+        event.waitUntil(cacheResponse(request, copy));
       }
       return response;
     }).catch(async () => {
-      const cached = await caches.match(request);
+      const cached = await matchCache(request);
       if (cached) return cached;
       if (request.mode === 'navigate') {
-        return caches.match(request.url.includes('commander') ? './commander.html' : './index.html');
+        const fallback = await matchCache(request.url.includes('commander') ? './commander.html' : './index.html');
+        if (fallback) return fallback;
       }
       throw new Error('Ressource indisponible hors ligne.');
     }),

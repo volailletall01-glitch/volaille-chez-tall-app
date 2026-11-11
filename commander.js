@@ -11,6 +11,13 @@
   const amount = (value) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value) || 0)}`;
   const configured = Boolean(config.url && config.anonKey && !/VOTRE|COLLEZ|COLLEZ_ICI/i.test(config.anonKey));
 
+  function whatsappDigits(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.length === 8) digits = `223${digits}`;
+    return digits;
+  }
+
   async function request(path, options = {}) {
     const headers = {
       apikey: config.anonKey,
@@ -176,7 +183,7 @@
   async function loadStock({ silent = false } = {}) {
     if (!configured) { renderStock(); return; }
     try {
-      const rows = await request('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,updated_at');
+      const rows = await request('/rest/v1/app_config?id=eq.1&select=*');
       state.stock = Array.isArray(rows) && rows.length ? rows[0] : null;
       renderStock();
     } catch (error) {
@@ -213,6 +220,34 @@
       return `Le prix par tête doit être compris entre ${amount(min)} FCFA et ${amount(max)} FCFA.`;
     }
     return '';
+  }
+
+  function showManagerAlert(values, total) {
+    const link = $('#thanks-whatsapp');
+    if (!link) return;
+    const manager = whatsappDigits(state.stock?.manager_whatsapp);
+    if (!manager) {
+      link.hidden = true;
+      link.removeAttribute('href');
+      return;
+    }
+    const when = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
+    const message = [
+      'Bonjour, nouvelle commande Volaille chez TALL :',
+      `Client : ${values.client_name}`,
+      `Téléphone : ${values.client_phone}`,
+      `Quartier : ${values.neighborhood}`,
+      `Quantité : ${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''}`,
+      `Prix proposé : ${money(values.price_per_head)} par tête`,
+      `Total estimé : ${money(total)}`,
+      `Reçue le ${when}`,
+    ].join('\n');
+    link.href = `https://wa.me/${manager}?text=${encodeURIComponent(message)}`;
+    link.hidden = false;
+    window.setTimeout(() => {
+      if (link.hidden || !link.href) return;
+      try { link.click(); } catch { /* le bouton reste disponible */ }
+    }, 700);
   }
 
   async function submitOrder(event) {
@@ -260,6 +295,7 @@
       $('#thanks-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
       renderTrack();
       setHint('');
+      showManagerAlert(values, total);
       loadStock({ silent: true });
     } catch (error) {
       setHint(error.message || 'Envoi impossible. Vérifiez votre connexion puis réessayez.', true);
@@ -278,6 +314,32 @@
     }, REFRESH_MS);
   }
 
+  const IOS_INSTALL_KEY = 'volaille-ios-install-dismissed-v1';
+
+  function isIosDevice() {
+    const ua = navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(ua)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function isStandaloneMode() {
+    return window.navigator.standalone === true
+      || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  function setupIosInstallGuide() {
+    const banner = $('#ios-install');
+    if (!banner || !isIosDevice() || isStandaloneMode()) return;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem(IOS_INSTALL_KEY) === '1'; } catch { /* stockage purgé */ }
+    if (dismissed) return;
+    banner.hidden = false;
+    banner.querySelector('[data-dismiss-ios-install]')?.addEventListener('click', () => {
+      banner.hidden = true;
+      try { localStorage.setItem(IOS_INSTALL_KEY, '1'); } catch { /* stockage purgé */ }
+    });
+  }
+
   function init() {
     if (!configured) {
       renderStock();
@@ -288,6 +350,8 @@
     $('#thanks-again').addEventListener('click', () => {
       state.thanks = false;
       $('#thanks-card').hidden = true;
+      const alertLink = $('#thanks-whatsapp');
+      if (alertLink) { alertLink.hidden = true; alertLink.removeAttribute('href'); }
       $('#form-card').hidden = false;
       $('#order-name').focus();
       loadStock({ silent: true });
@@ -298,6 +362,10 @@
     updateTotal();
     loadStock();
     startRefresh();
+    setupIosInstallGuide();
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('./sw.js').catch((error) => console.error('Service worker non enregistré :', error));
+    }
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') {
         loadStock({ silent: true });

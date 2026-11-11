@@ -5,12 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f7f2" />
     <meta name="description" content="Commandez vos poulets de chair chez Volaille chez TALL. Stock et prix en temps réel." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Volaille chez TALL" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="icon" href="./icons/volaille-chez-tall-192.png" type="image/png" sizes="192x192" />
-    <link rel="apple-touch-icon" href="./icons/volaille-chez-tall-180.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/volaille-chez-tall-180.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="./icons/volaille-chez-tall-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./styles.css" />
     <title>Commander — Volaille chez TALL</title>
   </head>
   <body class="order-body">
+    <div class="ios-install" id="ios-install" role="dialog" aria-live="polite" aria-label="Installer l’application sur l’écran d’accueil" hidden>
+      <div class="ios-install-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 16V3m0 0 4 4m-4-4L8 7"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>
+      </div>
+      <div class="ios-install-copy">
+        <strong>Installer Volaille chez TALL</strong>
+        <p>Appuyez sur l’icône Partager de Safari, puis sur « Sur l’écran d’accueil ».</p>
+      </div>
+      <button class="ios-install-close" type="button" aria-label="Masquer ce conseil" data-dismiss-ios-install>×</button>
+    </div>
+
     <header class="order-topbar">
       <a class="brand order-brand" href="./commander.html" aria-label="Volaille chez TALL, commander">
         <img class="brand-mark" src="./icons/volaille-chez-tall-192.png" srcset="./icons/volaille-chez-tall-logo.png 96w, ./icons/volaille-chez-tall-192.png 192w, ./icons/volaille-chez-tall-512.png 512w" sizes="48px" alt="" width="48" height="48" decoding="async" />
@@ -79,6 +96,7 @@
           <h2 id="thanks-title">Merci infiniment !</h2>
           <p id="thanks-message">Votre commande a bien été reçue. Nous vous contactons très vite pour confirmer la livraison.</p>
           <p class="order-thanks-recap" id="thanks-recap"></p>
+          <a class="primary-button order-whatsapp" id="thanks-whatsapp" href="#" target="_blank" rel="noopener" hidden>Prévenir le gestionnaire sur WhatsApp</a>
           <button class="secondary-button" type="button" id="thanks-again">Passer une autre commande</button>
         </article>
 
