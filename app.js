@@ -52,6 +52,7 @@ const sum = (items, getter) => items.reduce((total, item) => total + (Number(get
 const isArchived = (band) => Boolean(band && band.archived_at);
 const isOpenBand = (band) => Boolean(band) && !isArchived(band) && band.status !== 'closed';
 const visibleBands = (snapshot) => snapshot.bands.filter((band) => !isArchived(band));
+const activeBandIds = (snapshot) => new Set(snapshot.bands.filter((band) => !isArchived(band)).map((band) => band.id));
 
 async function preloadLogo() {
   try {
@@ -60,19 +61,23 @@ async function preloadLogo() {
     await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = reject;
-      img.src = './icons/volaille-chez-tall-logo.png';
+      img.src = './icons/volaille-chez-tall-512.png';
     });
-    const scale = Math.min(1, 90 / (img.width || 90));
-    const w = Math.max(1, Math.round((img.width || 90) * scale));
-    const h = Math.max(1, Math.round((img.height || 90) * scale));
+    const native = Math.min(img.width || 512, img.height || 512);
+    const target = Math.min(native, 256);
+    const ratio = target / (img.width || target);
+    const w = Math.max(1, Math.round((img.width || target) * ratio));
+    const h = Math.max(1, Math.round((img.height || target) * ratio));
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.94);
     const base64 = dataUrl.split(',')[1] || '';
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -481,8 +486,13 @@ async function deleteRecords(storeName, ids) {
 
 async function deleteLogsForBand(bandId) {
   if (!bandId) return;
-  await apiRequest(`/rest/v1/daily_logs?batch_id=eq.${encodeURIComponent(bandId)}`, { method: 'DELETE' });
-  remoteCache.daily_logs = (remoteCache.daily_logs || []).filter((log) => log.batch_id !== bandId);
+  await deleteRecordsByBand('daily_logs', bandId);
+}
+
+async function deleteRecordsByBand(storeName, bandId) {
+  if (!bandId) return;
+  await apiRequest(`/rest/v1/${storeName}?batch_id=eq.${encodeURIComponent(bandId)}`, { method: 'DELETE' });
+  remoteCache[storeName] = (remoteCache[storeName] || []).filter((record) => record.batch_id !== bandId);
 }
 
 async function getSnapshot() {
@@ -614,6 +624,7 @@ function renderDashboard(snapshot) {
 
   if (!bands.length) {
     return `${heading}
+      ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : plus aucune opération dans le quotidien, mais l’historique reste comptabilisé dans les statistiques annuelles.</p>` : ''}
       <section class="panel table-panel">${emptyState('Aucune bande active', 'Créez votre premier lot pour voir apparaître ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Créer une bande</button>')}</section>`;
   }
 
@@ -691,33 +702,39 @@ function renderBands(snapshot) {
     const birds = activeBirds(band, snapshot);
     const deaths = bandMortality(band, snapshot);
     const revenue = bandRevenue(band, snapshot);
-    return `<tr><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')}</span></td>
+    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')}</span></td>
       <td>${dateLabel(band.arrival_date)}</td><td>${number(band.initial_count)}</td><td>${number(birds)}</td><td>${number(deaths)}</td><td>${currency(revenue)}</td>
       <td>${band.archived_at ? dateLabel(String(band.archived_at).slice(0, 10)) : '—'}</td>
-      <td class="actions-cell"><button class="secondary-button" type="button" data-action="restore-band" data-band-id="${esc(band.id)}">Restaurer</button></td></tr>`;
+      <td class="actions-cell"><button class="secondary-button" type="button" data-action="restore-band" data-band-id="${esc(band.id)}">Restaurer</button><button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}" title="Supprimer définitivement la bande et toutes ses données">Supprimer</button></td></tr>`;
   }).join('');
 
   return `<div class="page-heading"><div><h1>Bandes de production</h1><p>Suivez vos lots de poulets de chair du démarrage à la vente.</p></div><button class="primary-button" data-action="new-band"><span class="plus">+</span> Nouvelle bande</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${visible.length} bande${visible.length > 1 ? 's' : ''} active${visible.length > 1 ? 's' : ''}</p></div></div>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${visible.length} bande${visible.length > 1 ? 's' : ''} active${visible.length > 1 ? 's' : ''}. Cliquez sur une ligne pour consulter sa fiche.</p></div></div>
       ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>
-    ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archivées</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retirée${archived.length > 1 ? 's' : ''} de l’élevage — leur historique reste comptabilisé dans les statistiques et rapports globaux.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Poussins</th><th>Sujets restants</th><th>Mortalité</th><th>Chiffre d’affaires</th><th>Archivée le</th><th>Action</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
+    ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archivées</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retirée${archived.length > 1 ? 's' : ''} de l’élevage actif — plus aucune opération dans les menus du quotidien, mais l’historique reste comptabilisé dans les statistiques annuelles. La suppression définitive efface la bande et toutes ses données.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Poussins</th><th>Sujets restants</th><th>Mortalité</th><th>Chiffre d’affaires</th><th>Archivée le</th><th>Actions</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
 }
 
 function renderDaily(snapshot) {
-  const rows = [...snapshot.logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
+  const activeIds = activeBandIds(snapshot);
+  const logs = snapshot.logs.filter((log) => activeIds.has(log.batch_id));
+  const archivedCount = snapshot.logs.length - logs.length;
+  const rows = [...logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
     const band = snapshot.bands.find((item) => item.id === log.batch_id);
     return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>
       <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`;
   }).join('');
   return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalités et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${snapshot.logs.length} relevé${snapshot.logs.length > 1 ? 's' : ''} · la suppression recalcule aussitôt les totaux.</p></div></div>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${logs.length} relevé${logs.length > 1 ? 's' : ''} · la suppression recalcule aussitôt les totaux.${archivedCount ? ` ${number(archivedCount)} relevé${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} conservé${archivedCount > 1 ? 's' : ''} dans les statistiques annuelles.` : ''}</p></div></div>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
 }
 
 
 function renderSales(snapshot) {
-  const rows = [...snapshot.sales].sort((a, b) => (b.sale_date || '').localeCompare(a.sale_date || '')).map((sale) => {
+  const activeIds = activeBandIds(snapshot);
+  const sales = snapshot.sales.filter((sale) => !sale.batch_id || activeIds.has(sale.batch_id));
+  const archivedCount = snapshot.sales.length - sales.length;
+  const rows = [...sales].sort((a, b) => (b.sale_date || '').localeCompare(a.sale_date || '')).map((sale) => {
     const band = snapshot.bands.find((item) => item.id === sale.batch_id);
     const due = Number(sale.total_amount) - Number(sale.paid_amount);
     return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="Sélectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
@@ -725,10 +742,11 @@ function renderSales(snapshot) {
       <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Reçu</button>
       <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">✕</button></td></tr>`;
   }).join('');
-  const revenue = sum(snapshot.sales, (sale) => sale.total_amount);
-  const unpaid = sum(snapshot.sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
+  const revenue = sum(sales, (sale) => sale.total_amount);
+  const unpaid = sum(sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
   return `<div class="page-heading"><div><h1>Ventes & commandes</h1><p>Associez chaque vente à son lot et suivez les règlements clients.</p></div><button class="primary-button" data-action="new-sale"><span class="plus">+</span> Nouvelle vente</button></div>
-    <section class="metrics-grid">${metricCard('Ventes enregistrées', number(snapshot.sales.length), 'Toutes périodes', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Crédits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste à encaisser — cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(snapshot.sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
+    <section class="metrics-grid">${metricCard('Ventes enregistrées', number(sales.length), 'Bandes actives', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Crédits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste à encaisser — cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} vente${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : historique conservé dans les statistiques annuelles.</p>` : ''}
     <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au détail ou sur commande. Cochez les lignes pour supprimer plusieurs ventes.</p></div>
       <div class="sales-bulk"><label class="sales-check-all"><input type="checkbox" id="sales-select-all" /> Tout sélectionner</label>
       <button class="secondary-button danger-outline" type="button" id="sales-delete-selected" data-action="delete-selected-sales" disabled>Supprimer la sélection</button></div></div>
@@ -801,7 +819,7 @@ async function deleteCharge(chargeId) {
 async function archiveBand(bandId) {
   const band = (await readAll('bands')).find((item) => item.id === bandId);
   if (!band) { toast('Bande introuvable.', true); return; }
-  if (!confirm(`Archiver la bande « ${band.name} » ?\n\nElle disparaîtra de l’élevage actif, mais tout son historique (relevés, ventes, charges) restera conservé dans les statistiques et rapports globaux.`)) return;
+  if (!confirm(`Archiver la bande « ${band.name} » ?\n\nElle et ses opérations (relevés, ventes, charges) disparaîtront des menus de gestion quotidienne. Tout son historique restera consultable dans les statistiques annuelles, sans fausser les calculs globaux.`)) return;
   await saveRecord('bands', { ...band, archived_at: new Date().toISOString() });
   toast('Bande archivée — historique conservé.');
   await render();
@@ -815,6 +833,37 @@ async function restoreBand(bandId) {
   toast('Bande restaurée dans l’élevage actif.');
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
+}
+
+async function deleteBandPermanently(bandId) {
+  if (!bandId) return false;
+  const snapshot = await getSnapshot();
+  const band = snapshot.bands.find((item) => item.id === bandId);
+  if (!band) { toast('Bande introuvable.', true); return false; }
+  if (!isArchived(band)) {
+    toast('Archivez d’abord la bande, puis supprimez-la définitivement.', true);
+    return false;
+  }
+  const logs = snapshot.logs.filter((log) => log.batch_id === band.id);
+  const sales = snapshot.sales.filter((sale) => sale.batch_id === band.id);
+  const charges = snapshot.charges.filter((charge) => charge.batch_id === band.id);
+  const details = `${logs.length} relevé${logs.length > 1 ? 's' : ''}, ${sales.length} vente${sales.length > 1 ? 's' : ''} et ${charges.length} charge${charges.length > 1 ? 's' : ''}`;
+  if (!confirm(`Supprimer DÉFINITIVEMENT la bande « ${band.name} » ?\n\n${details} seront effacés de votre compte et de l’historique statistique. Cette action est irréversible.`)) return false;
+  const typed = prompt(`Sécurité : tapez le nom exact de la bande pour confirmer la suppression définitive.\n\n${band.name}`);
+  if (typed === null) return false;
+  if (typed.trim() !== String(band.name).trim()) {
+    toast('Suppression annulée : le nom saisi ne correspond pas.', true);
+    return false;
+  }
+  await deleteRecordsByBand('daily_logs', band.id);
+  await deleteRecordsByBand('sales', band.id);
+  await deleteRecordsByBand('charges', band.id);
+  await deleteRecord('bands', band.id);
+  if ($('#app-dialog').open) closeDialog();
+  toast('Bande supprimée définitivement avec toutes ses données.');
+  await render();
+  publishStock({ silent: true }).catch((error) => console.error(error));
+  return true;
 }
 
 async function emptyTrash() {
@@ -831,18 +880,33 @@ async function emptyTrash() {
 }
 
 function renderExpenses(snapshot) {
-  const rows = [...snapshot.charges].sort((a, b) => b.charge_date.localeCompare(a.charge_date)).map((charge) => {
+  const activeIds = activeBandIds(snapshot);
+  const bands = visibleBands(snapshot);
+  const charges = snapshot.charges.filter((charge) => !charge.batch_id || activeIds.has(charge.batch_id));
+  const archivedCount = snapshot.charges.length - charges.length;
+  const rows = [...charges].sort((a, b) => b.charge_date.localeCompare(a.charge_date)).map((charge) => {
     const band = snapshot.bands.find((item) => item.id === charge.batch_id);
     return `<tr><td>${dateLabel(charge.charge_date)}</td><td class="primary-cell">${esc(charge.description)}</td><td>${esc(CATEGORY_LABELS[charge.category] || charge.category)}</td><td>${esc(band?.name || 'Exploitation')}</td><td>${currency(charge.amount)}</td>
       <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`;
   }).join('');
-  const total = sum(snapshot.charges, (charge) => charge.amount);
+  const total = sum(charges, (charge) => charge.amount);
   return `<div class="page-heading"><div><h1>Charges d’exploitation</h1><p>Centralisez les dépenses directes et communes de la ferme.</p></div><button class="primary-button" data-action="new-charge"><span class="plus">+</span> Ajouter une charge</button></div>
-    <section class="metrics-grid">${metricCard('Charges enregistrées', number(snapshot.charges.length), 'Dépenses hors aliment', 'expenses')}${metricCard('Total des charges', currency(total), 'Depuis l’ouverture', 'money')}${metricCard('Coûts des bandes', currency(sum(snapshot.bands, (band) => bandCost(band, snapshot))), 'Poussins, transport, aliment et soins', 'bird')}${metricCard('Dépenses générales', currency(sum(snapshot.charges.filter((item) => !item.batch_id), (item) => item.amount)), 'Non affectées à un lot', 'stock')}</section>
+    <section class="metrics-grid">${metricCard('Charges enregistrées', number(charges.length), 'Dépenses hors aliment', 'expenses')}${metricCard('Total des charges', currency(total), 'Bandes actives et exploitation', 'money')}${metricCard('Coûts des bandes', currency(sum(bands, (band) => bandCost(band, snapshot))), 'Poussins, transport, aliment et soins', 'bird')}${metricCard('Dépenses générales', currency(sum(charges.filter((item) => !item.batch_id), (item) => item.amount)), 'Non affectées à un lot', 'stock')}</section>
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} charge${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : historique conservé dans les statistiques annuelles.</p>` : ''}
     <section class="panel table-panel"><div class="panel-header"><div><h2>Journal des charges</h2><p>Les aliments consommés sont calculés dans le coût de chaque bande.</p></div></div>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Affectation</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-d’œuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
 }
 
+
+function statBarRow(label, value, max, kind, display, delay = 0) {
+  const ratio = max > 0 ? (Math.abs(Number(value) || 0) / max) * 100 : 0;
+  const width = Math.abs(value) > 0 ? Math.max(1.5, ratio) : 0;
+  return `<div class="stat-bar-row">
+    <span class="stat-bar-label">${esc(label)}</span>
+    <div class="stat-bar-track"><span class="stat-bar-fill ${kind}" style="--bar-w:${width.toFixed(1)}%;--bar-delay:${delay}ms"></span></div>
+    <span class="stat-bar-value">${display}</span>
+  </div>`;
+}
 
 function renderAnnualStats(snapshot) {
   const years = [...new Set([
@@ -851,7 +915,7 @@ function renderAnnualStats(snapshot) {
     ...snapshot.charges.map((charge) => (charge.charge_date || '').slice(0, 4)),
   ].filter(Boolean))].sort().reverse();
   if (!years.length) years.push(String(new Date().getFullYear()));
-  const rows = years.map((year) => {
+  const yearStats = years.map((year) => {
     const bands = snapshot.bands.filter((band) => (band.arrival_date || '').startsWith(year));
     const sales = snapshot.sales.filter((sale) => (sale.sale_date || '').startsWith(year));
     const charges = snapshot.charges.filter((charge) => (charge.charge_date || '').startsWith(year));
@@ -865,19 +929,69 @@ function renderAnnualStats(snapshot) {
     const revenue = sum(sales, (sale) => sale.total_amount);
     const costs = sum(bands, (band) => bandCost(band, snapshot)) + sum(charges.filter((c) => !c.batch_id), (c) => c.amount);
     const profit = revenue - costs;
-    return `<tr><td class="primary-cell">${esc(year)}</td><td>${number(bands.length)}</td><td>${number(initial)}</td><td>${number(deaths)}</td><td>${number(sold)}</td><td>${currency(revenue)}</td><td>${currency(costs)}</td><td class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</td></tr>`;
-  }).join('');
+    const rate = initial ? (deaths / initial) * 100 : 0;
+    return { year, bands: bands.length, initial, deaths, sold, revenue, costs, profit, rate };
+  });
+  const maxYearValue = Math.max(1, ...yearStats.map((item) => Math.max(item.revenue, item.costs, Math.abs(item.profit))));
+  const maxMortality = Math.max(5, ...yearStats.map((item) => item.rate));
+
+  const yearCharts = yearStats.map((item, index) => `
+    <article class="stats-year">
+      <header class="stats-year-head">
+        <div><h3>${esc(item.year)}</h3><p>${number(item.bands)} bande${item.bands > 1 ? 's' : ''} · ${number(item.initial)} sujets mis en place · ${number(item.sold)} vendus</p></div>
+        <span class="status-pill ${item.profit >= 0 ? '' : 'danger'}">${item.profit >= 0 ? 'Marge positive' : 'Marge négative'}</span>
+      </header>
+      <div class="stats-bars">
+        ${statBarRow('Recettes', item.revenue, maxYearValue, 'revenue', currency(item.revenue), 40)}
+        ${statBarRow('Dépenses', item.costs, maxYearValue, 'expense', currency(item.costs), 140)}
+        ${statBarRow('Marge nette', item.profit, maxYearValue, item.profit >= 0 ? 'margin' : 'margin-negative', currency(item.profit), 240)}
+        ${statBarRow('Mortalité', item.rate, maxMortality, 'mortality', `${number(item.rate, 1)} %`, 340 + index * 30)}
+      </div>
+    </article>`).join('');
+
+  const bandsTableRows = yearStats.map((item) => `<tr><td class="primary-cell">${esc(item.year)}</td><td>${number(item.bands)}</td><td>${number(item.initial)}</td><td>${number(item.deaths)}</td><td>${number(item.sold)}</td><td>${currency(item.revenue)}</td><td>${currency(item.costs)}</td><td class="${item.profit >= 0 ? 'positive' : 'low-stock'}">${currency(item.profit)}</td></tr>`).join('');
+
+  const bandStats = snapshot.bands.map((band) => {
+    const revenue = bandRevenue(band, snapshot);
+    const costs = bandCost(band, snapshot);
+    const deaths = bandMortality(band, snapshot);
+    const initial = Number(band.initial_count) || 0;
+    return { band, revenue, costs, profit: revenue - costs, rate: initial ? (deaths / initial) * 100 : 0 };
+  }).sort((a, b) => b.revenue - a.revenue || String(b.band.arrival_date || '').localeCompare(String(a.band.arrival_date || '')));
+  const maxBandValue = Math.max(1, ...bandStats.map((item) => Math.max(item.revenue, item.costs, Math.abs(item.profit))));
+  const bandCharts = bandStats.map((item, index) => `
+    <article class="stats-band-row">
+      <header class="stats-band-head">
+        <div><strong>${esc(item.band.name)}</strong>${isArchived(item.band) ? ' <span class="status-pill neutral">Archivée</span>' : ''}<span class="stats-band-meta">${esc(item.band.strain || 'Souche non précisée')} · ${number(item.band.initial_count)} poussins · mortalité ${number(item.rate, 1)} %</span></div>
+        <span class="stats-band-profit ${item.profit >= 0 ? 'positive' : 'low-stock'}">${currency(item.profit)}</span>
+      </header>
+      <div class="stats-bars compact">
+        ${statBarRow('Recettes', item.revenue, maxBandValue, 'revenue', currency(item.revenue), 30 + index * 15)}
+        ${statBarRow('Dépenses', item.costs, maxBandValue, 'expense', currency(item.costs), 100 + index * 15)}
+      </div>
+    </article>`).join('');
+
   const totalRevenue = sum(snapshot.sales, (sale) => sale.total_amount);
   const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot)) + sum(snapshot.charges.filter((c) => !c.batch_id), (c) => c.amount);
-  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan par année de votre exploitation.</p></div></div>
+  const hasHistory = snapshot.bands.length || snapshot.sales.length || snapshot.charges.length;
+  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan complet : bandes actives et archivées restent comptabilisées ici.</p></div></div>
     <section class="metrics-grid">
       ${metricCard('Chiffre d’affaires total', currency(totalRevenue), 'Toutes années', 'money')}
       ${metricCard('Dépenses totales', currency(totalCosts), 'Toutes années', 'expenses')}
       ${metricCard('Bénéfice total', currency(totalRevenue - totalCosts), 'Toutes années', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
-      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Toutes années', 'bands')}
+      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Actives et archivées', 'bands')}
     </section>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${hasHistory ? `<section class="panel stats-viz-panel">
+      <div class="panel-header"><div><h2>Performance par année</h2><p>Recettes, dépenses, marge nette et mortalité — graphiques animés, toutes bandes confondues.</p></div></div>
+      <div class="stats-year-list">${yearCharts}</div>
+      <div class="stats-legend"><span><i class="legend-dot revenue"></i> Recettes</span><span><i class="legend-dot expense"></i> Dépenses</span><span><i class="legend-dot margin"></i> Marge nette</span><span><i class="legend-dot mortality"></i> Mortalité</span></div>
+    </section>
+    <section class="panel stats-viz-panel">
+      <div class="panel-header"><div><h2>Performance par bande</h2><p>Chaque lot, actif ou archivé, avec ses recettes et ses dépenses. L’historique des bandes archivées reste ainsi consultable.</p></div></div>
+      ${bandCharts ? `<div class="stats-band-list">${bandCharts}</div>` : emptyState('Aucune bande à comparer', 'Les performances apparaîtront dès la création d’une bande.')}
+    </section>` : emptyState('Aucun historique statistique', 'Créez une bande, saisissez des charges et des ventes pour alimenter les statistiques.')}
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats consolidés.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${bandsTableRows}</tbody></table></div>
     </section>`;
 }
 
@@ -1177,10 +1291,11 @@ async function openBandDetail(bandId) {
   const deaths = sum(logs, (log) => log.mortality);
   const revenue = sum(sales, (sale) => sale.total_amount);
   const costs = bandCost(band, snapshot);
+  const archived = isArchived(band);
   const body = `
     <div class="dialog-form">
       <h3>${esc(band.name)}</h3>
-      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</p>
+      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}${archived ? ' · <span class="status-pill neutral">Archivée</span>' : ''}</p>
       <div class="metrics-grid" style="margin:12px 0">
         ${metricCard('Sujets en élevage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
         ${metricCard('Mortalité cumulée', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
@@ -1188,15 +1303,19 @@ async function openBandDetail(bandId) {
         ${metricCard('Dépenses', currency(costs), 'Coût cumulé du lot', 'expenses')}
         ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
       </div>
+      ${archived ? '<p class="archive-note">Bande archivée : ses opérations n’apparaissent plus dans les menus du quotidien, mais son historique reste comptabilisé dans les statistiques annuelles.</p>' : ''}
       <h3>Relevés (${logs.length})</h3>
-      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th><th>Actions</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td><td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
       <h3>Ventes (${sales.length})</h3>
       ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
       <h3>Charges (${charges.length})</h3>
-      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td><td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      <div class="dialog-actions">
+        ${archived ? `<button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}">Supprimer définitivement</button>` : ''}
+        <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
+      </div>
     </div>`;
-  setDialog(`Détail — ${band.name}`, 'Toutes les informations de la bande.', body);
+  setDialog(`Détail — ${band.name}`, archived ? 'Historique conservé — bande archivée.' : 'Toutes les informations de la bande.', body);
 }
 
 
@@ -1905,6 +2024,7 @@ async function handleAction(action, button = null) {
   else if (action === 'edit-band') { if (button?.dataset?.bandId) await openBandForm(button.dataset.bandId); }
   else if (action === 'archive-band') { if (button?.dataset?.bandId) await archiveBand(button.dataset.bandId); }
   else if (action === 'restore-band') { if (button?.dataset?.bandId) await restoreBand(button.dataset.bandId); }
+  else if (action === 'delete-band') { if (button?.dataset?.bandId) await deleteBandPermanently(button.dataset.bandId); }
   else if (action === 'delete-band-history') {
     const id = button?.dataset?.bandId;
     if (id && confirm('Supprimer tout l’historique (relevés) de cette bande ?')) {

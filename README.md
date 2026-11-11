@@ -42,7 +42,8 @@ Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en c
 
 ### Bandes
 - Création et modification : nom, souche, date de mise en place, nombre de poussins, fournisseur, poids et cycle cibles, prix unitaire du poussin, transport initial (coût initial calculé automatiquement).
-- **Archivage (suppression logique)** : la bande quitte l’élevage actif, mais tous ses relevés, ventes et charges restent conservés dans les statistiques et rapports globaux. Une section « Bandes archivées » permet de la restaurer.
+- **Archivage (suppression logique)** : la bande et toutes ses opérations (relevés, ventes, charges) disparaissent des menus de gestion quotidienne. Une section « Bandes archivées » permet de la restaurer.
+- **Suppression définitive** d’une bande archivée : efface en cascade la bande et tous ses relevés, ventes et charges, y compris dans les statistiques. Double confirmation (confirmation puis saisie du nom exact de la bande), action irréversible.
 - Suppression de l’historique des relevés d’une bande.
 - Clic sur une ligne : fiche complète de la bande (effectif, mortalité, coûts, ventes, bénéfice).
 
@@ -80,6 +81,13 @@ Un relevé par bande et par date, limité à l’essentiel :
 
 ### Statistiques annuelles
 - Synthèse par année : bandes, ventes, revenus, charges, bénéfice, mortalité.
+- **Graphiques animés** : recettes, dépenses, marge nette et mortalité par année, puis recettes et dépenses de chaque bande (actives et archivées). Les animations se désactivent si l’appareil demande moins de mouvement.
+- L’historique des bandes archivées reste consultable et comptabilisé dans les calculs globaux tant qu’elles ne sont pas supprimées définitivement.
+
+### Logo et netteté
+- Logo servi en 96, 192 et 512 px via `srcset`, avec des conteneurs de dimensions fixes et `object-fit: contain` : net sur écrans haute densité (Retina) sans étirement.
+- Rendu haute fidélité (`image-rendering` / anticrénelage) et conservation de la résolution native, sans recompression destructive.
+- Facteur d’agrandissement maximal ~256 px pour le logo du reçu PDF, afin de rester lisible à l’impression 80 mm.
 
 Tous les montants sont affichés en FCFA.
 
