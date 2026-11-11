@@ -1,0 +1,8 @@
+.git
+.venv
+.vercel
+.env
+.env.*
+*.log
+Thumbs.db
+Desktop.ini
