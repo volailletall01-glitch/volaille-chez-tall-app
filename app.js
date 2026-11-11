@@ -1211,9 +1211,11 @@ async function render() {
   $('#band-count').textContent = snapshot.bands.filter((band) => !isArchived(band)).length;
   updateOrderBadge();
   $('#today-label').textContent = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date());
-  $('#connection-label').textContent = navigator.onLine ? 'Mode hors ligne prêt' : 'Connexion indisponible';
+  $('#connection-label').textContent = navigator.onLine ? 'Synchronisation active' : 'Hors ligne';
   const syncLabel = $('#sync-label');
-  if (syncLabel) syncLabel.textContent = session ? 'Synchronisé · compte TALL' : 'Données sur cet appareil';
+  if (syncLabel) syncLabel.textContent = session
+    ? (navigator.onLine ? 'Compte TALL synchronisé' : 'Reconnexion au réseau requise')
+    : 'Non connecté';
   $('.offline-dot').classList.toggle('offline', !navigator.onLine);
   updateAccountUI();
 }
