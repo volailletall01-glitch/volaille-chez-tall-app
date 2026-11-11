@@ -21,7 +21,6 @@ const ICONS = {
 };
 const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', orders: 'Mes Commandes', expenses: 'Charges', annual: 'Statistiques annuelles' };
 const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
-const ORDERS_SESSION_KEY = 'poulet-orders-session';
 const SUPABASE = window.SUPABASE_CONFIG || {};
 const ordersState = { orders: [], lastFetch: 0, error: null, publicStock: null, loading: false };
 const CATEGORY_LABELS = {
@@ -758,13 +757,6 @@ async function handleSubmit(event) {
     });
   } else if (formId === 'charge-form') {
     await saveRecord('charges', { ...base, ...values, batch_id: values.batch_id || null });
-  } else if (formId === 'orders-login-form') {
-    await loginOrders(values.email.trim(), values.password);
-    closeDialog();
-    await render();
-    toast('Connecté.');
-    await publishStock({ silent: true }).catch((error) => console.error(error));
-    return;
   }
   closeDialog();
   await render();
@@ -776,26 +768,12 @@ function supabaseReady() {
   return Boolean(SUPABASE.url && SUPABASE.anonKey && !/VOTRE|COLLEZ|COLLEZ_ICI/i.test(SUPABASE.anonKey));
 }
 
-function readOrderSession() {
-  try {
-    const session = JSON.parse(localStorage.getItem(ORDERS_SESSION_KEY) || 'null');
-    return session && session.access_token ? session : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveOrderSession(session) {
-  if (session) localStorage.setItem(ORDERS_SESSION_KEY, JSON.stringify(session));
-  else localStorage.removeItem(ORDERS_SESSION_KEY);
-}
-
-async function supabaseRequest(path, { method = 'GET', body, token, headers = {} } = {}) {
+async function supabaseRequest(path, { method = 'GET', body, headers = {} } = {}) {
   const response = await fetch(`${SUPABASE.url}${path}`, {
     method,
     headers: {
       apikey: SUPABASE.anonKey,
-      Authorization: `Bearer ${token || SUPABASE.anonKey}`,
+      Authorization: `Bearer ${SUPABASE.anonKey}`,
       'Content-Type': 'application/json',
       ...headers,
     },
@@ -815,60 +793,10 @@ async function supabaseRequest(path, { method = 'GET', body, token, headers = {}
   return data;
 }
 
-async function authRequest(path, body) {
-  const response = await fetch(`${SUPABASE.url}${path}`, {
-    method: 'POST',
-    headers: { apikey: SUPABASE.anonKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data.error_description || data.msg || data.message || 'Connexion refusée.');
-    error.status = response.status;
-    throw error;
-  }
-  return data;
-}
-
-async function ensureOrderToken() {
-  const session = readOrderSession();
-  if (!session) return null;
-  if (Number(session.expires_at) > Date.now() + 60000) return session.access_token;
-  try {
-    const data = await authRequest('/auth/v1/token?grant_type=refresh_token', { refresh_token: session.refresh_token });
-    const refreshed = {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
-      email: session.email,
-    };
-    saveOrderSession(refreshed);
-    return refreshed.access_token;
-  } catch {
-    saveOrderSession(null);
-    return null;
-  }
-}
-
-async function loginOrders(email, password) {
-  if (!supabaseReady()) throw new Error('Supabase n’est pas configuré.');
-  const data = await authRequest('/auth/v1/token?grant_type=password', { email, password });
-  saveOrderSession({
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
-    email,
-  });
-  ordersState.lastFetch = 0;
-  ordersState.orders = [];
-}
-
 async function loadOrders({ force = false } = {}) {
-  if (!supabaseReady() || !readOrderSession()) return [];
+  if (!supabaseReady()) return [];
   if (!force && Date.now() - ordersState.lastFetch < 15000) return ordersState.orders;
-  const token = await ensureOrderToken();
-  if (!token) return [];
-  const rows = await supabaseRequest('/rest/v1/orders?select=*&order=created_at.desc', { token });
+  const rows = await supabaseRequest('/rest/v1/orders?select=*&order=created_at.desc');
   ordersState.orders = Array.isArray(rows) ? rows : [];
   ordersState.lastFetch = Date.now();
   return ordersState.orders;
@@ -877,11 +805,6 @@ async function loadOrders({ force = false } = {}) {
 async function publishStock({ silent = false } = {}) {
   if (!supabaseReady()) {
     if (!silent) toast('Supabase n’est pas configuré.', true);
-    return;
-  }
-  const token = await ensureOrderToken();
-  if (!token) {
-    if (!silent) toast('Connectez-vous pour publier le stock.', true);
     return;
   }
   const snapshot = await getSnapshot();
@@ -893,7 +816,7 @@ async function publishStock({ silent = false } = {}) {
     updated_at: new Date().toISOString(),
   };
   await supabaseRequest('/rest/v1/app_config?id=eq.1', {
-    method: 'PATCH', token, body: payload, headers: { Prefer: 'return=minimal' },
+    method: 'PATCH', body: payload, headers: { Prefer: 'return=minimal' },
   });
   ordersState.publicStock = payload;
   if (!silent) {
@@ -911,7 +834,7 @@ function updateOrderBadge() {
 }
 
 async function refreshOrderBadge() {
-  if (supabaseReady() && readOrderSession()) {
+  if (supabaseReady()) {
     try { await loadOrders(); } catch (error) { console.error(error); }
   }
   updateOrderBadge();
@@ -949,8 +872,6 @@ async function validateOrder(orderId, button) {
     if (Number(order.quantity) > available) {
       throw new Error(`Stock insuffisant : ${number(available)} sujet${available > 1 ? 's' : ''} disponible${available > 1 ? 's' : ''} pour ${number(order.quantity)} demandé${Number(order.quantity) > 1 ? 's' : ''}.`);
     }
-    const token = await ensureOrderToken();
-    if (!token) throw new Error('Reconnectez-vous pour valider une commande.');
     const pricePerHead = Number(order.price_per_head) || 0;
     const saleDate = today();
     const created = [];
@@ -993,7 +914,6 @@ async function validateOrder(orderId, button) {
     try {
       await supabaseRequest(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`, {
         method: 'PATCH',
-        token,
         body: { status: 'validee', handled_at: new Date().toISOString() },
         headers: { Prefer: 'return=minimal' },
       });
@@ -1020,11 +940,8 @@ async function refuseOrder(orderId, button) {
   if (!confirm(`Refuser la commande de ${order.client_name} (${number(order.quantity)} poulets) ?`)) return;
   if (button) button.disabled = true;
   try {
-    const token = await ensureOrderToken();
-    if (!token) throw new Error('Reconnectez-vous pour refuser une commande.');
     await supabaseRequest(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`, {
       method: 'PATCH',
-      token,
       body: { status: 'refusee', handled_at: new Date().toISOString() },
       headers: { Prefer: 'return=minimal' },
     });
@@ -1038,23 +955,6 @@ async function refuseOrder(orderId, button) {
   } finally {
     if (button) button.disabled = false;
   }
-}
-
-async function openOrdersLogin() {
-  setDialog('Connexion gérant', 'Accédez aux commandes reçues depuis la page publique.', `
-    <form class="dialog-form" id="orders-login-form"><div class="form-grid">
-      <div class="field full"><label for="orders-email">E-mail</label><input id="orders-email" name="email" type="email" autocomplete="username" required /></div>
-      <div class="field full"><label for="orders-password">Mot de passe</label><input id="orders-password" name="password" type="password" autocomplete="current-password" required /></div>
-      <p class="field-hint full">Compte créé dans Supabase, section Authentication → Users.</p>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Se connecter</button></div></form>`);
-}
-
-async function logoutOrders() {
-  saveOrderSession(null);
-  ordersState.orders = [];
-  ordersState.lastFetch = 0;
-  toast('Déconnecté.');
-  await render();
 }
 
 async function copyOrderLink() {
@@ -1077,22 +977,12 @@ async function renderOrders(snapshot) {
     return `${header()}<section class="panel"><div class="panel-header"><div><h2>Connexion à Supabase requise</h2><p>Les commandes ne peuvent pas encore être reçues.</p></div></div>
       <div class="orders-setup">
         <p>Renseignez l’URL du projet et la clé publique <code>anon</code> dans <code>supabase-config.js</code>, puis exécutez <code>supabase/commandes.sql</code> dans le SQL Editor Supabase.</p>
-        <p>Créez ensuite un compte gérant dans <strong>Authentication → Users</strong> pour valider ou refuser les commandes.</p>
       </div></section>`;
-  }
-  const session = readOrderSession();
-  if (!session) {
-    return `${header()}<section class="panel"><div class="panel-header"><div><h2>Connexion gérant</h2><p>Les commandes sont visibles après connexion.</p></div></div>
-      <div class="orders-login"><p>Connectez-vous avec le compte créé dans Supabase pour consulter et traiter les demandes.</p><button class="primary-button" type="button" data-action="orders-login">Se connecter</button></div></section>`;
   }
   let error = null;
   try {
     await loadOrders({ force: true });
   } catch (requestError) {
-    if (requestError.status === 401) {
-      saveOrderSession(null);
-      return `${header()}<section class="panel"><div class="orders-login"><p>Votre session a expiré. Reconnectez-vous pour retrouver les commandes.</p><button class="primary-button" type="button" data-action="orders-login">Se reconnecter</button></div></section>`;
-    }
     error = requestError.message;
   }
   try {
@@ -1138,8 +1028,7 @@ async function renderOrders(snapshot) {
       ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
     ${error ? `<p class="orders-error">Impossible de rafraîchir les commandes : ${esc(error)}</p>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes reçues</h2><p>${orders.length} commande${orders.length > 1 ? 's' : ''} · stock actuel de l’élevage : ${number(liveStock)} sujets</p></div>
-      <button class="text-button" type="button" data-action="orders-logout">Se déconnecter</button></div>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes reçues</h2><p>${orders.length} commande${orders.length > 1 ? 's' : ''} · stock actuel de l’élevage : ${number(liveStock)} sujets</p></div></div>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Prix / tête</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : emptyState('Aucune commande pour le moment', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>`;
 }
@@ -1169,8 +1058,6 @@ async function handleAction(action, button = null) {
   else if (action === 'new-daily') await openDailyForm();
   else if (action === 'new-sale') await openSaleForm();
   else if (action === 'new-charge') await openChargeForm();
-  else if (action === 'orders-login') await openOrdersLogin();
-  else if (action === 'orders-logout') await logoutOrders();
   else if (action === 'refresh-orders') { await loadOrders({ force: true }).catch((error) => toast(error.message, true)); await render(); }
   else if (action === 'publish-stock') await publishStock();
   else if (action === 'copy-order-link') await copyOrderLink();
@@ -1247,7 +1134,7 @@ async function main() {
   if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
   await setPage(initialPage);
   refreshOrderBadge();
-  if (supabaseReady() && readOrderSession()) publishStock({ silent: true }).catch((error) => console.error(error));
+  if (supabaseReady()) publishStock({ silent: true }).catch((error) => console.error(error));
 }
 
 main().catch((error) => {

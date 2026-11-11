@@ -58,7 +58,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - Si le stock est épuisé, le formulaire est remplacé par le message « Désolé, le stock est actuellement épuisé. »
 - Le client saisit nom et prénom, téléphone, quartier, quantité et prix par tête proposé. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
 - Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (statut Validée, quantité déduite du stock de l’élevage et stock public réactualisé) et bouton **Refuser** (statut Refusée, sans impact sur le stock) qui prépare un message d’excuse à envoyer sur WhatsApp.
-- Les commandes sont stockées dans Supabase ; la connexion gérant se fait dans l’onglet avec le compte créé dans **Authentication → Users**.
+- Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 
 ### Charges
 - Dépense libre ou affectée à une bande.
@@ -90,14 +90,13 @@ POULET/
 
 - Bandes, relevés, ventes, charges et clients sont stockés localement dans IndexedDB, par navigateur et par adresse (origine). Ils ne sont pas partagés entre appareils.
 - Vider les données du site ou changer d’adresse (par exemple passer de GitHub Pages à Vercel) revient à repartir d’une base vide pour ces données locales.
-- **Commandes clients** : seules les commandes et le stock publié passent par Supabase, afin que le lien public fonctionne depuis n’importe quel appareil. La clé utilisée dans `supabase-config.js` est publique et limitée par les règles de sécurité (RLS) : elle ne peut que créer une commande et lire le stock publié.
+- **Commandes clients** : seules les commandes et le stock publié passent par Supabase, afin que le lien public fonctionne depuis n’importe quel appareil. La clé utilisée dans `supabase-config.js` est publique et limitée par les règles de sécurité (RLS) : elle ne peut que créer une commande, lire les commandes reçues, les passer à « Validée » ou « Refusée » et publier le stock. Il n’y a volontairement plus de compte ni de mot de passe : toute personne qui ouvre l’application peut traiter les commandes, donc gardez l’adresse privée.
 
 ## Mise en place de Supabase (une seule fois)
 
-1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor**.
-2. Créer le compte gérant dans **Authentication → Users → Add user**.
-3. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-4. Dans l’application, ouvrir **Mes Commandes → Se connecter**, puis **Publier le stock** pour rendre le stock visible sur la page publique.
+1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor** (tables, règles RLS, droits pour la clé publique).
+2. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+3. Dans l’application, ouvrir **Mes Commandes**, puis **Publier le stock** pour rendre le stock visible sur la page publique.
 
 ## Installer
 

@@ -46,14 +46,17 @@ create policy "orders_insert_public" on public.orders
   for insert to anon, authenticated
   with check (status = 'en_attente' and handled_at is null);
 
+-- Accès direct depuis l'application gérant, sans écran de connexion.
 drop policy if exists "orders_read_manager" on public.orders;
-create policy "orders_read_manager" on public.orders
-  for select to authenticated
+drop policy if exists "orders_read_app" on public.orders;
+create policy "orders_read_app" on public.orders
+  for select to anon, authenticated
   using (true);
 
 drop policy if exists "orders_update_manager" on public.orders;
-create policy "orders_update_manager" on public.orders
-  for update to authenticated
+drop policy if exists "orders_update_app" on public.orders;
+create policy "orders_update_app" on public.orders
+  for update to anon, authenticated
   using (true)
   with check (status in ('en_attente', 'validee', 'refusee'));
 
@@ -64,19 +67,21 @@ create policy "config_read_public" on public.app_config
   using (true);
 
 drop policy if exists "config_update_manager" on public.app_config;
-create policy "config_update_manager" on public.app_config
-  for update to authenticated
+drop policy if exists "config_update_app" on public.app_config;
+create policy "config_update_app" on public.app_config
+  for update to anon, authenticated
   using (true)
   with check (id = 1);
 
--- Droits minimaux
+-- Droits
 revoke all on public.orders from anon;
 grant insert (client_name, client_phone, neighborhood, quantity, price_per_head)
   on public.orders to anon;
+grant select, update on public.orders to anon;
 grant select, update on public.orders to authenticated;
 
 revoke all on public.app_config from anon;
-grant select on public.app_config to anon;
+grant select, update on public.app_config to anon;
 grant select, update on public.app_config to authenticated;
 
 -- Exemple : le stock sera publié par l'application gérant.
