@@ -107,7 +107,7 @@ POULET/
 
 Après chaque modification de `app.js`, `styles.css`, `index.html` ou des icônes :
 
-1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v30`) pour forcer la mise à jour du cache.
+1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v34`) pour forcer la mise à jour du cache.
 2. Rechargez l’application en désinscrivant le service worker ou en vidant le cache du site.
 
 ## Limites connues
