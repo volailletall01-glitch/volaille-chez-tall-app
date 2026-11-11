@@ -1172,6 +1172,28 @@ async function refuseOrder(orderId, button) {
   }
 }
 
+async function restoreOrder(orderId, button) {
+  const order = ordersState.orders.find((item) => item.id === orderId);
+  if (!order || order.status !== 'refusee') return;
+  if (button) button.disabled = true;
+  try {
+    await supabaseRequest(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}`, {
+      method: 'PATCH',
+      body: { status: 'en_attente', handled_at: null },
+      headers: { Prefer: 'return=minimal' },
+    });
+    order.status = 'en_attente';
+    order.handled_at = null;
+    ordersState.lastFetch = 0;
+    toast(`Commande de ${order.client_name} restaurée : elle est de nouveau en attente.`);
+    await render();
+  } catch (error) {
+    toast(error.message || 'Restauration impossible.', true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function copyOrderLink() {
   const url = new URL('./commander.html', location.href).href;
   try {
@@ -1275,6 +1297,7 @@ async function renderOrders(snapshot) {
       <td>${currency(total)}</td>
       <td>${order.handled_at ? dateLabel(String(order.handled_at).slice(0, 10)) : '—'}</td>
       <td><span class="status-pill danger">${trashCountdown(order)}</span></td>
+      <td class="orders-table-actions"><button class="secondary-button" type="button" data-action="restore-order" data-order-id="${esc(order.id)}">Restaurer</button></td>
     </tr>`;
   }).join('');
   const actions = `<button class="secondary-button" type="button" data-action="copy-order-link">Copier le lien public</button>
@@ -1294,7 +1317,7 @@ async function renderOrders(snapshot) {
       : emptyState('Aucune commande en attente', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>
     <section class="panel table-panel trash-panel"><div class="panel-header"><div><h2>Corbeille des commandes refusées</h2><p>Les commandes refusées sont conservées 72 heures, puis supprimées automatiquement.</p></div>
       ${refused.length ? '<button class="secondary-button danger-outline" type="button" data-action="empty-trash">Vider la corbeille</button>' : ''}</div>
-    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
+    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th><th>Actions</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
       : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refusées apparaîtront ici avant leur suppression définitive.</p></div>'}</section>`;
 }
 
@@ -1328,6 +1351,7 @@ async function handleAction(action, button = null) {
   else if (action === 'empty-trash') await emptyTrash();
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
+  else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }
   else if (action === 'settings') toast('Paramètres locaux uniquement.');
 }
 

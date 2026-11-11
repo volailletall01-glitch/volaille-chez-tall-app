@@ -103,7 +103,7 @@
 
   async function refreshOrder() {
     const order = state.order;
-    if (!order || !order.id || order.status === 'validee' || order.status === 'refusee') return;
+    if (!order || !order.id || order.status === 'validee') return;
     try {
       const rows = await request(`/rest/v1/orders?id=eq.${encodeURIComponent(order.id)}&select=id,status,handled_at`);
       const row = Array.isArray(rows) ? rows[0] : null;

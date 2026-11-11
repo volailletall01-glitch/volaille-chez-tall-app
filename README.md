@@ -62,7 +62,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - Le client saisit nom et prénom, téléphone, quartier, quantité et prix par tête proposé. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
 - En bas de la page, un grand bandeau suit la commande : « Commande en traitement — veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande ». Dès que le gérant valide, il devient un message de confirmation et de remerciement (et un message d’excuse si la commande est refusée). Le suivi reste visible si le client revient plus tard sur le même appareil.
 - Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (la commande bascule automatiquement dans les ventes, la quantité est déduite du stock de l’élevage et le stock public est réactualisé) et bouton **Refuser** (la commande part dans la **Corbeille**, sans impact sur le stock, avec un message d’excuse à envoyer sur WhatsApp).
-- **Corbeille** : les commandes refusées y restent 72 heures (compte à rebours affiché), puis sont purgées automatiquement. Un bouton permet de la vider immédiatement.
+- **Corbeille** : les commandes refusées y restent 72 heures (compte à rebours affiché), puis sont purgées automatiquement. Un bouton **Restaurer** remet une commande refusée en attente (elle redevient traitable et le bandeau du client repasse à « Commande en traitement ») ; un autre bouton permet de vider la corbeille immédiatement.
 - Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 
 ### Charges
@@ -112,7 +112,7 @@ POULET/
 
 Après chaque modification de `app.js`, `styles.css`, `index.html` ou des icônes :
 
-1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v37`) pour forcer la mise à jour du cache.
+1. Incrémentez `CACHE_NAME` dans `sw.js` (par exemple `poulet-pro-shell-v38`) pour forcer la mise à jour du cache.
 2. Rechargez l’application en désinscrivant le service worker ou en vidant le cache du site.
 
 ## Limites connues
