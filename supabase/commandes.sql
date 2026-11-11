@@ -2,10 +2,11 @@
 -- À exécuter dans Supabase → SQL Editor.
 --
 -- Principe :
---   * le public (clé anon) peut seulement créer une commande « en_attente »
+--   * le public (clé anon) peut créer une commande « en_attente »
 --     et lire le stock publié ;
---   * le gérant connecté (Supabase Authentication) peut lire les commandes,
---     les valider ou les refuser, et publier le stock.
+--   * l'application gérant utilise la même clé publique, sans compte ni
+--     mot de passe : elle peut lire les commandes, les valider ou les
+--     refuser, et publier le stock.
 
 create extension if not exists pgcrypto;
 
