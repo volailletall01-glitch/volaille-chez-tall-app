@@ -37,7 +37,7 @@ Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en c
 - Les données sont stockées sur le compte Supabase : à la reconnexion sur un autre appareil, l’historique complet est retrouvé automatiquement.
 - Bouton **Mon compte** (barre latérale sur ordinateur, avatar du tableau de bord et du bandeau supérieur sur téléphone) : profil, nombre d’enregistrements, synchronisation manuelle, **modification du numéro WhatsApp du gestionnaire**, **changement du mot de passe**, **restauration de l’application** (vide le cache puis resynchronise), **déconnexion** et **suppression définitive du compte** (confirmation par saisie de « SUPPRIMER », effacement des données du compte et du cache local).
 - Un bouton **Se déconnecter** est également disponible directement dans la barre latérale.
-- Une **recherche globale** est accessible par la loupe (bandeau du tableau de bord sur téléphone, barre supérieure ailleurs) : elle retrouve instantanément les bandes, clients et ventes, charges et commandes, puis ouvre la section correspondante.
+- Une **recherche globale** est accessible par la loupe (bandeau du tableau de bord sur téléphone, barre supérieure ailleurs) : elle retrouve instantanément les bandes, clients et ventes, charges et commandes **du compte connecté uniquement** (les commandes publiques ne remontent que si elles sont rattachées à l’une de vos bandes), puis ouvre la section correspondante.
 - Le numéro WhatsApp est publié dans `app_config` afin que la page publique de commande puisse alerter le gestionnaire, même sans compte connecté.
 
 ### Vue d’ensemble

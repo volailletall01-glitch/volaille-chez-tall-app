@@ -1901,6 +1901,22 @@ async function loadOrders({ force = false } = {}) {
   return ordersState.orders;
 }
 
+// Recherche globale : ne récupérer que les commandes rattachées aux bandes
+// du compte connecté (public.orders est une boîte de réception publique).
+async function loadAccountOrders(snapshot) {
+  if (!supabaseReady()) return [];
+  const bandIds = (snapshot?.bands || []).map((band) => band.id).filter(Boolean);
+  if (!bandIds.length) return [];
+  const filter = bandIds.map((id) => encodeURIComponent(id)).join(',');
+  try {
+    const rows = await supabaseRequest(`/rest/v1/orders?select=*&band_id=in.(${filter})&order=created_at.desc`);
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    console.warn('Commandes du compte non chargées pour la recherche', error);
+    return [];
+  }
+}
+
 async function publishSellingStock({ heads, min, max, band = null }) {
   if (!supabaseReady()) throw new Error('Supabase n’est pas configuré.');
   const payload = {
@@ -2831,8 +2847,11 @@ function renderSearchResults(query, snapshot, orders) {
       subtitle: `${dateLabel(charge.charge_date)} · ${currency(charge.amount)}`,
     })).join('')}</div>`);
   }
+  const accountBandIds = new Set((snapshot.bands || []).map((band) => band.id).filter(Boolean));
   const orderList = Array.isArray(orders)
-    ? orders.filter((order) => searchMatch(raw, order.client_name, order.client_phone, order.band_name, order.neighborhood))
+    ? orders
+      .filter((order) => order.band_id && accountBandIds.has(order.band_id))
+      .filter((order) => searchMatch(raw, order.client_name, order.client_phone, order.band_name, order.neighborhood))
     : [];
   if (orderList.length) {
     groups.push(`<div class="search-group"><h4>Commandes <span>${number(orderList.length)}</span></h4>${orderList.slice(0, 6).map((order) => searchResultButton({
@@ -2848,12 +2867,9 @@ function renderSearchResults(query, snapshot, orders) {
 }
 
 async function openSearchDialog() {
-  let orders = [];
-  if (supabaseReady()) {
-    try { await loadOrders({ force: false }); orders = ordersState.orders; } catch (error) { orders = ordersState.orders || []; }
-  }
   const snapshot = await getSnapshot();
-  setDialog('Rechercher', 'Retrouvez une bande, un client, une vente, une charge ou une commande.', `
+  const orders = await loadAccountOrders(snapshot);
+  setDialog('Rechercher', 'Recherche limitée aux données de votre compte : bandes, clients, ventes, charges et commandes liées à vos bandes.', `
     <div class="dialog-form search-dialog" role="search">
       <div class="field full">
         <label for="global-search-input">Rechercher dans l’application</label>
