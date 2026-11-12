@@ -514,6 +514,7 @@ body.is-authenticated .auth-screen { display: none; }
 .auth-tab.active { background: #fff; color: var(--green-900); box-shadow: 0 2px 8px rgba(25,71,51,.1); }
 .auth-form { display: grid; gap: 13px; }
 .auth-field { display: grid; gap: 6px; }
+.auth-field[hidden] { display: none; }
 .auth-field > label { color: #5c6a61; font-size: 10px; font-weight: 700; }
 .auth-field input {
   width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid #dfe7de; border-radius: 11px;

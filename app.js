@@ -221,6 +221,7 @@ let remoteSettings = {};
 let dataLoaded = false;
 let authMode = 'signin';
 let pendingAuth = null;
+let pendingSignupWhatsApp = '';
 
 function readStoredSession() {
   try {
@@ -434,13 +435,14 @@ async function beginPasswordSignIn(identifier, password) {
   return prepareMfaChallenge(payload, email);
 }
 
-async function signUpWithIdentifier(identifier, password) {
+async function signUpWithIdentifier(identifier, password, whatsapp) {
   const email = normalizeIdentifier(identifier);
   if (email.endsWith(`@${PHONE_DOMAIN}`)) {
     throw new Error('Créez votre compte avec une adresse email réelle.');
   }
+  const normalizedWhatsApp = normalizeWhatsAppNumber(whatsapp);
   const payload = await authRequest('/auth/v1/signup', {
-    body: { email, password },
+    body: { email, password, data: { whatsapp: normalizedWhatsApp } },
   });
   if (!payload?.access_token) {
     throw new Error('Compte créé. Confirmez votre email puis reconnectez-vous.');
@@ -506,7 +508,14 @@ async function publishManagerWhatsApp(whatsapp) {
 }
 
 async function syncManagerWhatsApp() {
-  const whatsapp = await loadProfileWhatsApp();
+  let whatsapp = await loadProfileWhatsApp();
+  if (!whatsapp) {
+    const metadata = String(session?.user?.user_metadata?.whatsapp || '').replace(/\D/g, '');
+    if (metadata) {
+      await upsertProfile('', metadata);
+      whatsapp = metadata;
+    }
+  }
   if (!whatsapp) return '';
   await publishManagerWhatsApp(whatsapp);
   return whatsapp;
@@ -516,6 +525,7 @@ async function signOut() {
   const token = session?.access_token;
   persistSession(null);
   pendingAuth = null;
+  pendingSignupWhatsApp = '';
   remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
   remoteSettings = {};
   dataLoaded = false;
@@ -2747,6 +2757,7 @@ function showAuthScreen() {
   const screen = $('#auth-screen');
   if (screen) screen.hidden = false;
   pendingAuth = null;
+  pendingSignupWhatsApp = '';
   setAuthMode('signin');
   setAuthStep('login');
   window.setTimeout(() => $('#auth-identifier')?.focus(), 420);
@@ -3077,13 +3088,25 @@ function bindAuthUI() {
     if (!supabaseReady()) { setAuthError('Supabase n’est pas configuré.'); return; }
     const identifier = $('#auth-identifier')?.value.trim() || '';
     const password = $('#auth-password')?.value || '';
+    const whatsapp = $('#auth-whatsapp')?.value.trim() || '';
     setAuthError('');
     if (!identifier) { setAuthError('Entrez votre adresse email.'); return; }
     if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
+    let normalizedWhatsApp = '';
+    if (authMode === 'signup') {
+      try {
+        normalizedWhatsApp = normalizeWhatsAppNumber(whatsapp);
+      } catch (error) {
+        setAuthError(error.message);
+        $('#auth-whatsapp')?.focus();
+        return;
+      }
+    }
     authBusy(true);
     try {
+      pendingSignupWhatsApp = authMode === 'signup' ? normalizedWhatsApp : '';
       const payload = authMode === 'signup'
-        ? await signUpWithIdentifier(identifier, password)
+        ? await signUpWithIdentifier(identifier, password, normalizedWhatsApp)
         : null;
       const challenge = payload
         ? await prepareMfaChallenge(payload, identifier)
@@ -3096,6 +3119,7 @@ function bindAuthUI() {
         ? 'Scannez le QR code pour activer la double authentification.'
         : 'Saisissez le code de votre application d’authentification.');
     } catch (error) {
+      pendingSignupWhatsApp = '';
       setAuthError(friendlyAuthError(error));
     } finally {
       authBusy(false);
@@ -3120,9 +3144,12 @@ function bindAuthUI() {
         pendingAuth.passwordPayload.access_token,
       );
       if (!payload?.access_token) throw new Error('Code incorrect.');
+      const signupWhatsApp = pendingSignupWhatsApp;
       pendingAuth = null;
+      pendingSignupWhatsApp = '';
       storeSession(payload);
-      await upsertProfile();
+      await upsertProfile('', signupWhatsApp);
+      if (signupWhatsApp) await publishManagerWhatsApp(signupWhatsApp);
       setAuthStep('login');
       await startApp();
       toast('Double authentification validée · bienvenue.');
@@ -3152,6 +3179,7 @@ function bindAuthUI() {
       }).catch(() => {});
     }
     pendingAuth = null;
+    pendingSignupWhatsApp = '';
     setAuthStep('login');
     setAuthError('');
     $('#auth-password')?.focus();

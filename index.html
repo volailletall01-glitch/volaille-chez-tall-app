@@ -56,6 +56,11 @@
             <label for="auth-identifier">Adresse email</label>
             <input id="auth-identifier" name="identifier" type="email" inputmode="email" autocomplete="username" placeholder="vous@exemple.com" required />
           </div>
+          <div class="auth-field" data-signup-only hidden>
+            <label for="auth-whatsapp">Numéro WhatsApp *</label>
+            <input id="auth-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="+223 78 31 48 18" aria-required="true" aria-describedby="auth-whatsapp-hint" />
+            <small class="auth-field-hint" id="auth-whatsapp-hint">Format international requis. Les alertes de commandes seront envoyées à ce numéro.</small>
+          </div>
           <div class="auth-field">
             <label for="auth-password">Mot de passe</label>
             <div class="auth-password">
