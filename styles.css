@@ -190,6 +190,12 @@ tbody tr:hover { background: #fcfdfc; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
+  .sidebar {
+    position: fixed; inset: auto 0 0 0; width: 100%; height: calc(68px + env(safe-area-inset-bottom));
+    flex-direction: row; padding: 0 6px env(safe-area-inset-bottom); overflow: hidden;
+    border-right: 0; border-top: 1px solid var(--line); background: #fff; z-index: 40;
+    box-shadow: 0 -6px 18px rgba(22, 52, 37, .06);
+  }
   .nav-item[data-page="daily"],
   .nav-item[data-page="sales"],
   .nav-item[data-page="annual"] { display: none; }
@@ -646,68 +652,58 @@ body.is-authenticated .auth-screen { display: none; }
   .ios-install { bottom: calc(74px + env(safe-area-inset-bottom)); }
 }
 
-/* ---------- Interrupteur de mise en vente et déconnexion ---------- */
+/* ---------- Vue mobile (tableau de bord) ---------- */
 .mobile-logout { display: none; }
 .mobile-dashboard { display: none; }
 .mobile-pending-orders,
-.mobile-quick-actions,
-.mobile-sales-preview { display: none; }
+.mobile-quick-actions { display: none; }
 
 @media (max-width: 760px) {
+  body { background: #F7F5EE; }
   .mobile-logout { display: inline-flex; }
-
-@media (max-width: 760px) {
+  .mobile-dashboard { display: block; width: 100%; max-width: 100vw; overflow-x: hidden; }
   .page-dashboard .topbar { display: none; }
+  .page-dashboard .main-content { background: #F7F5EE; }
+  .page-dashboard .page-container { padding: 14px 14px 24px; }
+  .dashboard-heading,
   .band-kpi-list,
   .band-chart-panel,
+  .archive-note,
   .mobile-pending-orders,
-  .dashboard-heading,
-  .mobile-quick-actions,
-  .mobile-sales-preview { display: none; }
-  .mobile-dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .mobile-dash-brand { display: flex; align-items: center; gap: 8px; }
-  .mobile-avatar { width: 34px; height: 34px; border-radius: 50%; background: #0D7A4D; color: #fff; display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; }
-  .mobile-dash-brand strong { font: 700 16px 'Manrope', sans-serif; color: #0D7A4D; }
-  .mobile-dash-icons { display: flex; gap: 8px; }
-  .mobile-icon-btn { width: 32px; height: 32px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 14px; }
-  .mobile-salutation { margin: 4px 0 12px; font: 800 20px 'Manrope', sans-serif; color: #1d2924; }
-  .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-  .mobile-action-primary { min-height: 48px; border: 0; border-radius: 12px; background: #0D7A4D; color: #fff; font: 700 12px 'Manrope', sans-serif; letter-spacing: .4px; }
-  .mobile-action-secondary { min-height: 48px; border: 1px solid #0D7A4D; border-radius: 12px; background: #fff; color: #0D7A4D; font: 700 12px 'Manrope', sans-serif; letter-spacing: .4px; }
-  .mobile-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-  .mobile-kpi-card { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .mobile-kpi-label { display: block; font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .4px; margin-bottom: 6px; }
-  .mobile-kpi-value { display: block; font: 800 16px 'Manrope', sans-serif; color: #0D7A4D; }
-  .mobile-kpi-card small { color: var(--muted); font-size: 9px; }
-  .mobile-bands-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-  .mobile-band-card { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
-  .mobile-band-title { font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .4px; }
-  .mobile-band-stock { font-size: 11px; font-weight: 700; color: #1d2924; }
-  .mobile-tools-col { display: flex; flex-direction: column; gap: 8px; }
-  .mobile-tool-card { flex: 1; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: #0D7A4D; font: 700 10px 'Manrope', sans-serif; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .mobile-sales-preview { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .mobile-sales-header { display: flex; align-items: center; justify-content: space-between; }
-  .mobile-sales-header strong { font: 700 12px 'Manrope', sans-serif; color: #0D7A4D; }
-  .mobile-link { border: 0; background: transparent; color: #0D7A4D; font: 700 11px 'Manrope', sans-serif; }
-  .mobile-pending-orders { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 0 0 14px; border-radius: 12px; background: #eef6f0; color: #0D7A4D; font-weight: 800; }
-  .mobile-pending-count { font: 800 20px 'Manrope', sans-serif; }
-  .mobile-pending-label { font-size: 10px; letter-spacing: .6px; }
-  .mobile-quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
-  .mobile-action-tile { min-height: 56px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: #0D7A4D; font: 700 10px 'Manrope', sans-serif; }
-}
+  .mobile-quick-actions { display: none; }
 
-@media (max-width: 760px) {
-  .mobile-pending-orders { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin: 0 0 14px; border-radius: 12px; background: var(--amber-bg); color: var(--amber); font-weight: 800; }
-  .mobile-pending-count { font: 800 22px 'Manrope', sans-serif; line-height: 1; }
-  .mobile-pending-label { font-size: 11px; letter-spacing: .6px; }
-  .mobile-quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
-  .mobile-action-tile { min-height: 64px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--green-900); font: 700 10px 'Manrope', sans-serif; letter-spacing: .4px; text-transform: uppercase; }
-  .mobile-action-tile:active { background: var(--green-50); }
-  .mobile-sales-preview { display: block; margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-  .mobile-sales-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-  .mobile-sales-header strong { font: 700 12px 'Manrope', sans-serif; color: var(--green-950); }
-  .mobile-sales-note { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-  .band-kpi-list { grid-template-columns: 1fr 1fr; }
+  .mobile-dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .mobile-dash-brand { display: flex; align-items: center; gap: 8px; }
+  .mobile-avatar { width: 36px; height: 36px; border-radius: 50%; background: #0D7A4D; color: #fff; display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; letter-spacing: .5px; }
+  .mobile-dash-brand strong { font: 700 17px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-dash-icons { display: flex; gap: 8px; }
+  .mobile-icon-btn { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); font-size: 14px; display: grid; place-items: center; }
+
+  .mobile-salutation { margin: 2px 0 14px; font: 800 22px 'Manrope', sans-serif; color: #1d2924; }
+
+  .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .mobile-action-primary { min-height: 48px; border: 0; border-radius: 12px; background: #0D7A4D; color: #fff; font: 700 11px 'Manrope', sans-serif; letter-spacing: .4px; }
+  .mobile-action-secondary { min-height: 48px; border: 1px solid #0D7A4D; border-radius: 12px; background: #fff; color: #0D7A4D; font: 700 11px 'Manrope', sans-serif; letter-spacing: .4px; }
+
+  .mobile-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .mobile-kpi-card { padding: 12px; border: 1px solid #e6e3d8; border-radius: 12px; background: #fff; min-height: 84px; }
+  .mobile-kpi-label { display: block; font-size: 9px; font-weight: 700; color: #7c857f; letter-spacing: .4px; margin-bottom: 7px; line-height: 1.35; }
+  .mobile-kpi-value { display: block; font: 800 16px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-kpi-card small { display: block; margin-top: 3px; color: #7c857f; font-size: 9px; }
+
+  .mobile-bands-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .mobile-band-card { padding: 10px; border: 1px solid #e6e3d8; border-radius: 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .mobile-band-title { font-size: 8px; font-weight: 700; color: #7c857f; letter-spacing: .3px; line-height: 1.3; overflow-wrap: anywhere; }
+  .mobile-band-stock { font-size: 9px; font-weight: 700; color: #1d2924; overflow-wrap: anywhere; }
+  .mobile-band-stock strong { font: 800 13px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-tools-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .mobile-tool-card { flex: 1; min-height: 40px; padding: 6px; border: 1px solid #e6e3d8; border-radius: 12px; background: #fff; color: #0D7A4D; font: 700 9px 'Manrope', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center; line-height: 1.2; }
+  .mobile-tool-icon { font-size: 13px; }
+
+  .mobile-sales-preview { display: block; padding: 13px 14px; border: 1px solid #e6e3d8; border-radius: 12px; background: #fff; margin-bottom: 16px; }
+  .mobile-sales-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mobile-sales-header strong { font: 700 12px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-link { border: 0; background: transparent; color: #0D7A4D; font: 700 11px 'Manrope', sans-serif; padding: 0; }
 }
 
 @media (max-width: 430px) {
