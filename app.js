@@ -19,18 +19,18 @@ const ICONS = {
   money: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M7 9h.01M17 15h.01"/>',
   box: '<path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>',
 };
-const PAGE_LABELS = { dashboard: 'Vue dÔÇÖensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', orders: 'Mes Commandes', expenses: 'Charges', annual: 'Statistiques annuelles' };
-const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Valid├®e', refusee: 'Refus├®e' };
+const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', orders: 'Mes Commandes', expenses: 'Charges', annual: 'Statistiques annuelles' };
+const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
 const SUPABASE = window.SUPABASE_CONFIG || {};
 const ordersState = { orders: [], lastFetch: 0, error: null, publicStock: null, loading: false };
 const CATEGORY_LABELS = {
-  starter: 'Aliment d├®marrage', grower: 'Aliment croissance', finisher: 'Aliment finition',
-  veterinary: 'Produits v├®t├®rinaires', bedding: 'Liti├¿re / copeaux', heating: 'Gaz / chauffage', other: 'Autre intrant',
-  health: 'Sant├® / prophylaxie', labor: 'Main-dÔÇÖ┼ôuvre', water_energy: 'Eau / ├®lectricit├®',
+  starter: 'Aliment démarrage', grower: 'Aliment croissance', finisher: 'Aliment finition',
+  veterinary: 'Produits vétérinaires', bedding: 'Litière / copeaux', heating: 'Gaz / chauffage', other: 'Autre intrant',
+  health: 'Santé / prophylaxie', labor: 'Main-d’œuvre', water_energy: 'Eau / électricité',
   delivery: 'Transport livraison client', maintenance: 'Entretien',
 };
-const CHANNEL_LABELS = { wholesale: 'Grossiste / revendeur', restaurant: 'Restaurant', supermarket: 'Supermarch├®', retail: 'D├®tail / comptoir', other: 'Autre' };
-const PAYMENT_LABELS = { cash: 'Esp├¿ces', mobile_money: 'Mobile Money', transfer: 'Virement', credit: 'Cr├®dit client' };
+const CHANNEL_LABELS = { wholesale: 'Grossiste / revendeur', restaurant: 'Restaurant', supermarket: 'Supermarché', retail: 'Détail / comptoir', other: 'Autre' };
+const PAYMENT_LABELS = { cash: 'Espèces', mobile_money: 'Mobile Money', transfer: 'Virement', credit: 'Crédit client' };
 let db;
 let logoJpeg = null;
 let currentPage = 'dashboard';
@@ -46,7 +46,7 @@ const today = () => {
 const currency = (amount) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(amount) || 0)} FCFA`;
 const number = (amount, digits = 0) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(Number(amount) || 0);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : 'ÔÇö';
+const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
 const daysSince = (date) => Math.max(0, Math.floor((new Date(`${today()}T12:00:00`) - new Date(`${date}T12:00:00`)) / 86400000));
 const sum = (items, getter) => items.reduce((total, item) => total + (Number(getter(item)) || 0), 0);
 const isArchived = (band) => Boolean(band && band.archived_at);
@@ -99,7 +99,7 @@ function openDatabase() {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error('Impossible dÔÇÖouvrir le stockage local.'));
+    request.onerror = () => reject(request.error || new Error('Impossible d’ouvrir le stockage local.'));
   });
 }
 
@@ -115,7 +115,7 @@ function localReadMeta(key) {
   return new Promise((resolve, reject) => {
     const request = db.transaction('meta', 'readonly').objectStore('meta').get(key);
     request.onsuccess = () => resolve(request.result?.value ?? null);
-    request.onerror = () => reject(request.error || new Error('Lecture des param├¿tres impossible.'));
+    request.onerror = () => reject(request.error || new Error('Lecture des paramètres impossible.'));
   });
 }
 
@@ -124,7 +124,7 @@ function localWriteMeta(key, value) {
     const transaction = db.transaction('meta', 'readwrite');
     transaction.objectStore('meta').put({ id: key, value });
     transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Enregistrement des param├¿tres impossible.'));
+    transaction.onerror = () => reject(transaction.error || new Error('Enregistrement des paramètres impossible.'));
   });
 }
 
@@ -157,7 +157,7 @@ async function localDeleteLogsForBand(bandId) {
     const store = transaction.objectStore('daily_logs');
     for (const log of logs) store.delete(log.id);
     transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression de lÔÇÖhistorique impossible.'));
+    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
   });
 }
 
@@ -174,7 +174,7 @@ async function localSaveRecords(entries) {
     }
     transaction.oncomplete = () => resolve(prepared.map((entry) => entry.record));
     transaction.onerror = () => reject(transaction.error || new Error('Enregistrement local impossible.'));
-    transaction.onabort = () => reject(transaction.error || new Error('Enregistrement local annul├®.'));
+    transaction.onabort = () => reject(transaction.error || new Error('Enregistrement local annulé.'));
   });
 }
 
@@ -227,7 +227,7 @@ function persistSession(value) {
     if (value) localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(value));
     else localStorage.removeItem(AUTH_STORAGE_KEY);
   } catch (error) {
-    console.error('Session non persist├®e', error);
+    console.error('Session non persistée', error);
   }
 }
 
@@ -256,7 +256,7 @@ async function authRequest(path, { method = 'POST', body, token } = {}) {
 }
 
 function storeSession(payload) {
-  if (!payload || !payload.access_token) throw new Error('Connexion impossible : r├®ponse inattendue du serveur.');
+  if (!payload || !payload.access_token) throw new Error('Connexion impossible : réponse inattendue du serveur.');
   persistSession({
     access_token: payload.access_token,
     refresh_token: payload.refresh_token,
@@ -267,7 +267,7 @@ function storeSession(payload) {
 }
 
 async function refreshSession() {
-  if (!session?.refresh_token) throw new Error('Session expir├®e. Reconnectez-vous.');
+  if (!session?.refresh_token) throw new Error('Session expirée. Reconnectez-vous.');
   const payload = await authRequest('/auth/v1/token?grant_type=refresh_token', {
     body: { refresh_token: session.refresh_token },
   });
@@ -287,7 +287,7 @@ async function ensureSession() {
     }
     return session;
   } catch (error) {
-    console.warn('Session expir├®e', error);
+    console.warn('Session expirée', error);
     persistSession(null);
     return null;
   }
@@ -295,13 +295,13 @@ async function ensureSession() {
 
 function normalizeIdentifier(raw) {
   const value = String(raw || '').trim();
-  if (!value) throw new Error('Entrez votre email ou votre num├®ro de t├®l├®phone.');
+  if (!value) throw new Error('Entrez votre email ou votre numéro de téléphone.');
   if (value.includes('@')) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) throw new Error('Adresse email invalide.');
     return value.toLowerCase();
   }
   const digits = value.replace(/[^\d]/g, '');
-  if (digits.length < 6) throw new Error('Num├®ro de t├®l├®phone invalide (6 chiffres minimum).');
+  if (digits.length < 6) throw new Error('Numéro de téléphone invalide (6 chiffres minimum).');
   return `${digits}@${PHONE_DOMAIN}`;
 }
 
@@ -312,19 +312,19 @@ function phoneFromIdentifier(email) {
 function normalizeWhatsAppNumber(raw, { required = true } = {}) {
   const value = String(raw || '').trim();
   if (!value) {
-    if (required) throw new Error('Entrez votre num├®ro WhatsApp.');
+    if (required) throw new Error('Entrez votre numéro WhatsApp.');
     return '';
   }
   const compact = value.replace(/[^\d+]/g, '');
   if (!/^\+?\d{8,16}$/.test(compact)) {
-    throw new Error('Num├®ro WhatsApp invalide. Utilisez le format international, ex. +223 78 31 48 18.');
+    throw new Error('Numéro WhatsApp invalide. Utilisez le format international, ex. +223 78 31 48 18.');
   }
   let digits = compact.replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (digits.startsWith('0')) digits = digits.replace(/^0+/, '');
   if (digits.length === 8) digits = `223${digits}`;
   if (digits.length < 10 || digits.length > 15) {
-    throw new Error('Num├®ro WhatsApp invalide. Indiquez lÔÇÖindicatif pays, ex. +223 78 31 48 18.');
+    throw new Error('Numéro WhatsApp invalide. Indiquez l’indicatif pays, ex. +223 78 31 48 18.');
   }
   return digits;
 }
@@ -355,7 +355,7 @@ async function signUpWithIdentifier(identifier, password, whatsapp) {
     },
   });
   if (!payload?.access_token) {
-    throw new Error('Compte cr├®├®. La confirmation par email est encore active : validez le lien re├ºu puis reconnectez-vous.');
+    throw new Error('Compte créé. La confirmation par email est encore active : validez le lien reçu puis reconnectez-vous.');
   }
   storeSession(payload);
   const saved = await upsertProfile('', normalizedWhatsApp);
@@ -382,7 +382,7 @@ async function upsertProfile(displayName = '', whatsapp = '') {
     });
     return true;
   } catch (error) {
-    console.warn('Profil non synchronis├®', error);
+    console.warn('Profil non synchronisé', error);
     return false;
   }
 }
@@ -394,7 +394,7 @@ async function loadProfileWhatsApp() {
     const value = Array.isArray(rows) && rows[0] ? rows[0].whatsapp : '';
     return String(value || '').replace(/\D/g, '');
   } catch (error) {
-    console.warn('Num├®ro WhatsApp du profil illisible', error);
+    console.warn('Numéro WhatsApp du profil illisible', error);
     return '';
   }
 }
@@ -415,7 +415,7 @@ async function publishManagerWhatsApp(whatsapp) {
     });
     return true;
   } catch (error) {
-    console.warn('Num├®ro WhatsApp du gestionnaire non publi├®', error);
+    console.warn('Numéro WhatsApp du gestionnaire non publié', error);
     return false;
   }
 }
@@ -442,8 +442,8 @@ async function signOut() {
 }
 
 async function apiRequest(path, { method = 'GET', body, headers = {}, prefer } = {}) {
-  if (!SUPABASE.url || !SUPABASE.anonKey) throw new Error('Supabase nÔÇÖest pas configur├®.');
-  if (!session?.access_token) throw new Error('Vous devez ├¬tre connect├®.');
+  if (!SUPABASE.url || !SUPABASE.anonKey) throw new Error('Supabase n’est pas configuré.');
+  if (!session?.access_token) throw new Error('Vous devez être connecté.');
   const response = await fetch(`${SUPABASE.url}${path}`, {
     method,
     headers: {
@@ -500,12 +500,12 @@ async function cacheRemoteSnapshot() {
   try {
     localStorage.setItem(`remote-snapshot:${session.user.id}`, JSON.stringify(snapshotData));
   } catch (error) {
-    /* stockage LocalStorage satur├® ou restreint par WebKit */
+    /* stockage LocalStorage saturé ou restreint par WebKit */
   }
 }
 
 async function loadRemoteData({ silent = false } = {}) {
-  if (!session?.access_token) throw new Error('Vous devez ├¬tre connect├®.');
+  if (!session?.access_token) throw new Error('Vous devez être connecté.');
   const queries = REMOTE_TABLES.map((table) => apiRequest(`/rest/v1/${table}?select=*`));
   const results = await Promise.all(queries);
   REMOTE_TABLES.forEach((table, index) => {
@@ -516,7 +516,7 @@ async function loadRemoteData({ silent = false } = {}) {
   (settings || []).forEach((row) => { remoteSettings[row.key] = row.value; });
   dataLoaded = true;
   await cacheRemoteSnapshot();
-  if (!silent) console.info('Donn├®es synchronis├®es', REMOTE_TABLES.map((table) => `${table}:${remoteCache[table].length}`).join(' '));
+  if (!silent) console.info('Données synchronisées', REMOTE_TABLES.map((table) => `${table}:${remoteCache[table].length}`).join(' '));
   return getSnapshot();
 }
 
@@ -616,7 +616,7 @@ async function getSnapshot() {
       });
       remoteSettings = cached.settings || {};
       dataLoaded = true;
-      console.warn('Mode hors ligne : affichage du dernier snapshot synchronis├®.', error);
+      console.warn('Mode hors ligne : affichage du dernier snapshot synchronisé.', error);
     }
   }
   return {
@@ -645,7 +645,7 @@ async function migrateLocalData() {
   try {
     local = await localGetSnapshot();
   } catch (error) {
-    console.warn('Donn├®es locales illisibles', error);
+    console.warn('Données locales illisibles', error);
     return false;
   }
   const total = ['bands', 'logs', 'sales', 'charges'].reduce((count, key) => count + (local[key]?.length || 0), 0);
@@ -689,7 +689,7 @@ function setDialog(title, subtitle, body) {
   }
   $('#dialog-content').innerHTML = `
     <div class="dialog-head"><div><h2 id="dialog-title">${esc(title)}</h2><p>${esc(subtitle)}</p></div>
-      <button class="dialog-close" type="button" aria-label="Fermer" data-close-dialog>├ù</button></div>
+      <button class="dialog-close" type="button" aria-label="Fermer" data-close-dialog>×</button></div>
     ${body}`;
   dialog.showModal();
   const first = $('input, select, textarea, button', dialog);
@@ -726,7 +726,7 @@ function bandCost(band, snapshot) {
 
 function batchSelect(bands, selected = '') {
   return `<option value="">Choisir une bande</option>${bands.map((band) =>
-    `<option value="${esc(band.id)}" ${band.id === selected ? 'selected' : ''}>${esc(band.name)} ┬À ${activeBirds(band, window.snapshot || { logs: [], sales: [] })} sujets</option>`,
+    `<option value="${esc(band.id)}" ${band.id === selected ? 'selected' : ''}>${esc(band.name)} · ${activeBirds(band, window.snapshot || { logs: [], sales: [] })} sujets</option>`,
   ).join('')}`;
 }
 
@@ -866,18 +866,18 @@ function renderBands(snapshot) {
     const percent = band.initial_count ? (mortality / band.initial_count) * 100 : 0;
     const days = daysSince(band.arrival_date);
     const weight = [...snapshot.logs].filter((log) => log.batch_id === band.id && log.avg_weight_kg).sort((a, b) => b.log_date.localeCompare(a.log_date))[0]?.avg_weight_kg;
-    const weightText = weight ? `${number(weight, 2)} kg / ${number(band.target_weight_kg, 2)} kg cible` : `ÔÇö / ${number(band.target_weight_kg, 2)} kg cible`;
+    const weightText = weight ? `${number(weight, 2)} kg / ${number(band.target_weight_kg, 2)} kg cible` : `— / ${number(band.target_weight_kg, 2)} kg cible`;
     const forecast = new Date(`${band.arrival_date}T12:00:00`);
     forecast.setDate(forecast.getDate() + Number(band.target_age_days || 42));
     const saleableHeads = birds + sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.heads);
     const unitCost = saleableHeads ? bandCost(band, snapshot) / saleableHeads : 0;
-    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non pr├®cis├®e')} ┬À ${esc(band.supplier || 'Fournisseur non pr├®cis├®')}</span></td>
+    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}</span></td>
       <td>${dateLabel(band.arrival_date)}</td><td>J${days} / ${Number(band.target_age_days || 42)} j</td><td>${dateLabel(`${forecast.getFullYear()}-${String(forecast.getMonth() + 1).padStart(2, '0')}-${String(forecast.getDate()).padStart(2, '0')}`)}</td>
       <td>${number(birds)}</td><td>${number(percent, 1)} %</td><td>${weightText}</td><td>${currency(unitCost)}</td>
-      <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Cl├┤tur├®e' : 'En cours'}</span></td>
+      <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td>
       <td class="actions-cell">
-        <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">Ô£Ä</button>
-        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique des relev├®s">Ôå║</button>
+        <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">✎</button>
+        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique des relevés">↺</button>
         <button class="secondary-button danger-outline" type="button" data-action="archive-band" data-band-id="${esc(band.id)}" title="Archiver la bande">Archiver</button>
       </td></tr>`;
   }).join('');
@@ -886,17 +886,17 @@ function renderBands(snapshot) {
     const birds = activeBirds(band, snapshot);
     const deaths = bandMortality(band, snapshot);
     const revenue = bandRevenue(band, snapshot);
-    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non pr├®cis├®e')}</span></td>
+    return `<tr data-band-detail="${esc(band.id)}" style="cursor:pointer"><td class="primary-cell">${esc(band.name)}<span class="secondary-cell">${esc(band.strain || 'Souche non précisée')}</span></td>
       <td>${dateLabel(band.arrival_date)}</td><td>${number(band.initial_count)}</td><td>${number(birds)}</td><td>${number(deaths)}</td><td>${currency(revenue)}</td>
-      <td>${band.archived_at ? dateLabel(String(band.archived_at).slice(0, 10)) : 'ÔÇö'}</td>
-      <td class="actions-cell"><button class="secondary-button" type="button" data-action="restore-band" data-band-id="${esc(band.id)}">Restaurer</button><button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}" title="Supprimer d├®finitivement la bande et toutes ses donn├®es">Supprimer</button></td></tr>`;
+      <td>${band.archived_at ? dateLabel(String(band.archived_at).slice(0, 10)) : '—'}</td>
+      <td class="actions-cell"><button class="secondary-button" type="button" data-action="restore-band" data-band-id="${esc(band.id)}">Restaurer</button><button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}" title="Supprimer définitivement la bande et toutes ses données">Supprimer</button></td></tr>`;
   }).join('');
 
-  return `<div class="page-heading"><div><h1>Bandes de production</h1><p>Suivez vos lots de poulets de chair du d├®marrage ├á la vente.</p></div><button class="primary-button" data-action="new-band"><span class="plus">+</span> Nouvelle bande</button></div>
+  return `<div class="page-heading"><div><h1>Bandes de production</h1><p>Suivez vos lots de poulets de chair du démarrage à la vente.</p></div><button class="primary-button" data-action="new-band"><span class="plus">+</span> Nouvelle bande</button></div>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Tous les lots</h2><p>${visible.length} bande${visible.length > 1 ? 's' : ''} active${visible.length > 1 ? 's' : ''}. Cliquez sur une ligne pour consulter sa fiche.</p></div></div>
-      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arriv├®e</th><th>├ége</th><th>Vente cible estim├®e</th><th>En ├®levage</th><th>Mortalit├®</th><th>Poids r├®el / cible</th><th>Co├╗t / sujet sorti</th><th>Co├╗t cumul├®</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son co├╗t de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Cr├®er la premi├¿re bande</button>')}</section>
-    ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archiv├®es</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retir├®e${archived.length > 1 ? 's' : ''} de lÔÇÖ├®levage actif ÔÇö plus aucune op├®ration dans les menus du quotidien, mais lÔÇÖhistorique reste comptabilis├® dans les statistiques annuelles. La suppression d├®finitive efface la bande et toutes ses donn├®es.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arriv├®e</th><th>Poussins</th><th>Sujets restants</th><th>Mortalit├®</th><th>Chiffre dÔÇÖaffaires</th><th>Archiv├®e le</th><th>Actions</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
+      ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>
+    ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archivées</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retirée${archived.length > 1 ? 's' : ''} de l’élevage actif — plus aucune opération dans les menus du quotidien, mais l’historique reste comptabilisé dans les statistiques annuelles. La suppression définitive efface la bande et toutes ses données.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Poussins</th><th>Sujets restants</th><th>Mortalité</th><th>Chiffre d’affaires</th><th>Archivée le</th><th>Actions</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
 }
 
 let mobileBandTimer = null;
@@ -945,12 +945,12 @@ function renderDaily(snapshot) {
   const archivedCount = snapshot.logs.length - logs.length;
   const rows = [...logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
     const band = snapshot.bands.find((item) => item.id === log.batch_id);
-    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprim├®e')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || 'ÔÇö')}</td>
-      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relev├®">Ô£ò</button></td></tr>`;
+    return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`;
   }).join('');
-  return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalit├®s et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relev├®s</h2><p>${logs.length} relev├®${logs.length > 1 ? 's' : ''} ┬À la suppression recalcule aussit├┤t les totaux.${archivedCount ? ` ${number(archivedCount)} relev├®${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archiv├®e${archivedCount > 1 ? 's' : ''} conserv├®${archivedCount > 1 ? 's' : ''} dans les statistiques annuelles.` : ''}</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalit├®</th><th>Tri / r├®formes</th><th>Note / observation</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relev├® quotidien', 'Les mortalit├®s et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relev├®</button>')}</section>`;
+  return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalités et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${logs.length} relevé${logs.length > 1 ? 's' : ''} · la suppression recalcule aussitôt les totaux.${archivedCount ? ` ${number(archivedCount)} relevé${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} conservé${archivedCount > 1 ? 's' : ''} dans les statistiques annuelles.` : ''}</p></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Bande</th><th>Mortalité</th><th>Tri / réformes</th><th>Note / observation</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucun relevé quotidien', 'Les mortalités et observations se saisissent ici.', '<button class="primary-button" data-action="new-daily">Ajouter un relevé</button>')}</section>`;
 }
 
 
@@ -961,20 +961,20 @@ function renderSales(snapshot) {
   const rows = [...sales].sort((a, b) => (b.sale_date || '').localeCompare(a.sale_date || '')).map((sale) => {
     const band = snapshot.bands.find((item) => item.id === sale.batch_id);
     const due = Number(sale.total_amount) - Number(sale.paid_amount);
-    return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="S├®lectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
-      <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || 'ÔÇö')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? '├Ç encaisser' : 'Pay├®e'}</span></td>
-      <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || 'ÔÇö')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Re├ºu</button>
-      <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">Ô£ò</button></td></tr>`;
+    return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="Sélectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
+      <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td>
+      <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Reçu</button>
+      <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">✕</button></td></tr>`;
   }).join('');
   const revenue = sum(sales, (sale) => sale.total_amount);
   const unpaid = sum(sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
-  return `<div class="page-heading"><div><h1>Ventes & commandes</h1><p>Associez chaque vente ├á son lot et suivez les r├¿glements clients.</p></div><button class="primary-button" data-action="new-sale"><span class="plus">+</span> Nouvelle vente</button></div>
-    <section class="metrics-grid">${metricCard('Ventes enregistr├®es', number(sales.length), 'Bandes actives', 'sales')}${metricCard('Chiffre dÔÇÖaffaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Cr├®dits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste ├á encaisser ÔÇö cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
-    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} vente${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archiv├®e${archivedCount > 1 ? 's' : ''} : historique conserv├® dans les statistiques annuelles.</p>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au d├®tail ou sur commande. Cochez les lignes pour supprimer plusieurs ventes.</p></div>
-      <div class="sales-bulk"><label class="sales-check-all"><input type="checkbox" id="sales-select-all" /> Tout s├®lectionner</label>
-      <button class="secondary-button danger-outline" type="button" id="sales-delete-selected" data-action="delete-selected-sales" disabled>Supprimer la s├®lection</button></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th class="check-cell"><span class="sr-only">S├®lection</span></th><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>├ëtat</th><th>Re├ºu / Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistr├®e', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Cr├®er une vente</button>')}</section>`;
+  return `<div class="page-heading"><div><h1>Ventes & commandes</h1><p>Associez chaque vente à son lot et suivez les règlements clients.</p></div><button class="primary-button" data-action="new-sale"><span class="plus">+</span> Nouvelle vente</button></div>
+    <section class="metrics-grid">${metricCard('Ventes enregistrées', number(sales.length), 'Bandes actives', 'sales')}${metricCard('Chiffre d’affaires', currency(revenue), 'Montant total vendu', 'money')}<article class="metric-card" data-action="show-credits" style="cursor:pointer"><div class="metric-top"><span>Crédits clients</span><span class="metric-icon">${icon('daily')}</span></div><div class="metric-value">${currency(unpaid)}</div><div class="metric-note">Reste à encaisser — cliquer pour justifier</div></article>${metricCard('Sujets vendus', number(sum(sales, (sale) => sale.heads)), 'Poulets de chair', 'bird')}</section>
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} vente${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : historique conservé dans les statistiques annuelles.</p>` : ''}
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des ventes</h2><p>Vente en gros, au détail ou sur commande. Cochez les lignes pour supprimer plusieurs ventes.</p></div>
+      <div class="sales-bulk"><label class="sales-check-all"><input type="checkbox" id="sales-select-all" /> Tout sélectionner</label>
+      <button class="secondary-button danger-outline" type="button" id="sales-delete-selected" data-action="delete-selected-sales" disabled>Supprimer la sélection</button></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th class="check-cell"><span class="sr-only">Sélection</span></th><th>Date</th><th>Client</th><th>Bande source</th><th>Sujets</th><th>Poids total</th><th>Montant</th><th>Solde</th><th>Mode de paiement</th><th>État</th><th>Reçu / Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune vente enregistrée', 'Enregistrez une vente pour suivre les recettes et les sujets disponibles.', '<button class="primary-button" data-action="new-sale">Créer une vente</button>')}</section>`;
 }
 
 function updateSalesSelection() {
@@ -988,7 +988,7 @@ function updateSalesSelection() {
   const button = $('#sales-delete-selected');
   if (button) {
     button.disabled = checked.length === 0;
-    button.textContent = checked.length ? `Supprimer la s├®lection (${checked.length})` : 'Supprimer la s├®lection';
+    button.textContent = checked.length ? `Supprimer la sélection (${checked.length})` : 'Supprimer la sélection';
   }
   checks.forEach((node) => node.closest('tr')?.classList.toggle('row-selected', node.checked));
 }
@@ -1004,7 +1004,7 @@ async function deleteSales(ids) {
     : `Supprimer ces ${unique.length} ventes ? Les ${number(heads)} sujets reviendront dans le stock disponible.`;
   if (!confirm(message)) return false;
   await deleteRecords('sales', unique);
-  toast(`${unique.length} vente${unique.length > 1 ? 's' : ''} supprim├®e${unique.length > 1 ? 's' : ''} ┬À stock mis ├á jour.`);
+  toast(`${unique.length} vente${unique.length > 1 ? 's' : ''} supprimée${unique.length > 1 ? 's' : ''} · stock mis à jour.`);
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
   return true;
@@ -1014,13 +1014,13 @@ async function deleteDailyLog(logId) {
   if (!logId) return false;
   const snapshot = await getSnapshot();
   const log = snapshot.logs.find((item) => item.id === logId);
-  if (!log) { toast('Relev├® introuvable.', true); return false; }
+  if (!log) { toast('Relevé introuvable.', true); return false; }
   const band = snapshot.bands.find((item) => item.id === log.batch_id);
-  const label = `${dateLabel(log.log_date)}${band ? ` ÔÇö ${band.name}` : ''}`;
-  if (!confirm(`Supprimer le relev├® du ${label} ?\n\nLa mortalit├® (${number(log.mortality)}) et le tri (${number(log.culls)}) seront imm├®diatement retir├®s des totaux de la bande.`)) return false;
+  const label = `${dateLabel(log.log_date)}${band ? ` — ${band.name}` : ''}`;
+  if (!confirm(`Supprimer le relevé du ${label} ?\n\nLa mortalité (${number(log.mortality)}) et le tri (${number(log.culls)}) seront immédiatement retirés des totaux de la bande.`)) return false;
   await deleteRecord('daily_logs', logId);
   if ($('#app-dialog').open) closeDialog();
-  toast('Relev├® supprim├® ┬À totaux recalcul├®s imm├®diatement.');
+  toast('Relevé supprimé · totaux recalculés immédiatement.');
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
   return true;
@@ -1032,10 +1032,10 @@ async function deleteCharge(chargeId) {
   const charge = snapshot.charges.find((item) => item.id === chargeId);
   if (!charge) { toast('Charge introuvable.', true); return false; }
   const band = snapshot.bands.find((item) => item.id === charge.batch_id);
-  if (!confirm(`Supprimer la charge ┬½ ${charge.description} ┬╗ (${currency(charge.amount)}) ?\n\nElle sera imm├®diatement d├®duite des d├®penses${band ? ` de ┬½ ${band.name} ┬╗` : ''} et du b├®n├®fice.`)) return false;
+  if (!confirm(`Supprimer la charge « ${charge.description} » (${currency(charge.amount)}) ?\n\nElle sera immédiatement déduite des dépenses${band ? ` de « ${band.name} »` : ''} et du bénéfice.`)) return false;
   await deleteRecord('charges', chargeId);
   if ($('#app-dialog').open) closeDialog();
-  toast('Charge supprim├®e ┬À d├®penses et b├®n├®fice recalcul├®s.');
+  toast('Charge supprimée · dépenses et bénéfice recalculés.');
   await render();
   return true;
 }
@@ -1043,9 +1043,9 @@ async function deleteCharge(chargeId) {
 async function archiveBand(bandId) {
   const band = (await readAll('bands')).find((item) => item.id === bandId);
   if (!band) { toast('Bande introuvable.', true); return; }
-  if (!confirm(`Archiver la bande ┬½ ${band.name} ┬╗ ?\n\nElle et ses op├®rations (relev├®s, ventes, charges) dispara├«tront des menus de gestion quotidienne. Tout son historique restera consultable dans les statistiques annuelles, sans fausser les calculs globaux.`)) return;
+  if (!confirm(`Archiver la bande « ${band.name} » ?\n\nElle et ses opérations (relevés, ventes, charges) disparaîtront des menus de gestion quotidienne. Tout son historique restera consultable dans les statistiques annuelles, sans fausser les calculs globaux.`)) return;
   await saveRecord('bands', { ...band, archived_at: new Date().toISOString() });
-  toast('Bande archiv├®e ÔÇö historique conserv├®.');
+  toast('Bande archivée — historique conservé.');
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
 }
@@ -1054,7 +1054,7 @@ async function restoreBand(bandId) {
   const band = (await readAll('bands')).find((item) => item.id === bandId);
   if (!band) { toast('Bande introuvable.', true); return; }
   await saveRecord('bands', { ...band, archived_at: null });
-  toast('Bande restaur├®e dans lÔÇÖ├®levage actif.');
+  toast('Bande restaurée dans l’élevage actif.');
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
 }
@@ -1065,18 +1065,18 @@ async function deleteBandPermanently(bandId) {
   const band = snapshot.bands.find((item) => item.id === bandId);
   if (!band) { toast('Bande introuvable.', true); return false; }
   if (!isArchived(band)) {
-    toast('Archivez dÔÇÖabord la bande, puis supprimez-la d├®finitivement.', true);
+    toast('Archivez d’abord la bande, puis supprimez-la définitivement.', true);
     return false;
   }
   const logs = snapshot.logs.filter((log) => log.batch_id === band.id);
   const sales = snapshot.sales.filter((sale) => sale.batch_id === band.id);
   const charges = snapshot.charges.filter((charge) => charge.batch_id === band.id);
-  const details = `${logs.length} relev├®${logs.length > 1 ? 's' : ''}, ${sales.length} vente${sales.length > 1 ? 's' : ''} et ${charges.length} charge${charges.length > 1 ? 's' : ''}`;
-  if (!confirm(`Supprimer D├ëFINITIVEMENT la bande ┬½ ${band.name} ┬╗ ?\n\n${details} seront effac├®s de votre compte et de lÔÇÖhistorique statistique. Cette action est irr├®versible.`)) return false;
-  const typed = prompt(`S├®curit├® : tapez le nom exact de la bande pour confirmer la suppression d├®finitive.\n\n${band.name}`);
+  const details = `${logs.length} relevé${logs.length > 1 ? 's' : ''}, ${sales.length} vente${sales.length > 1 ? 's' : ''} et ${charges.length} charge${charges.length > 1 ? 's' : ''}`;
+  if (!confirm(`Supprimer DÉFINITIVEMENT la bande « ${band.name} » ?\n\n${details} seront effacés de votre compte et de l’historique statistique. Cette action est irréversible.`)) return false;
+  const typed = prompt(`Sécurité : tapez le nom exact de la bande pour confirmer la suppression définitive.\n\n${band.name}`);
   if (typed === null) return false;
   if (typed.trim() !== String(band.name).trim()) {
-    toast('Suppression annul├®e : le nom saisi ne correspond pas.', true);
+    toast('Suppression annulée : le nom saisi ne correspond pas.', true);
     return false;
   }
   await deleteRecordsByBand('daily_logs', band.id);
@@ -1084,7 +1084,7 @@ async function deleteBandPermanently(bandId) {
   await deleteRecordsByBand('charges', band.id);
   await deleteRecord('bands', band.id);
   if ($('#app-dialog').open) closeDialog();
-  toast('Bande supprim├®e d├®finitivement avec toutes ses donn├®es.');
+  toast('Bande supprimée définitivement avec toutes ses données.');
   await render();
   publishStock({ silent: true }).catch((error) => console.error(error));
   return true;
@@ -1092,11 +1092,11 @@ async function deleteBandPermanently(bandId) {
 
 async function emptyTrash() {
   const refused = ordersState.orders.filter((order) => order.status === 'refusee');
-  if (!refused.length) { toast('La corbeille est d├®j├á vide.'); return; }
-  if (!confirm(`Supprimer d├®finitivement les ${refused.length} commande${refused.length > 1 ? 's' : ''} refus├®e${refused.length > 1 ? 's' : ''} ? Cette action est irr├®versible.`)) return;
+  if (!refused.length) { toast('La corbeille est déjà vide.'); return; }
+  if (!confirm(`Supprimer définitivement les ${refused.length} commande${refused.length > 1 ? 's' : ''} refusée${refused.length > 1 ? 's' : ''} ? Cette action est irréversible.`)) return;
   try {
     await purgeTrash({ force: true });
-    toast('Corbeille vid├®e.');
+    toast('Corbeille vidée.');
     await render();
   } catch (error) {
     toast(error.message || 'Impossible de vider la corbeille.', true);
@@ -1111,14 +1111,14 @@ function renderExpenses(snapshot) {
   const rows = [...charges].sort((a, b) => b.charge_date.localeCompare(a.charge_date)).map((charge) => {
     const band = snapshot.bands.find((item) => item.id === charge.batch_id);
     return `<tr><td>${dateLabel(charge.charge_date)}</td><td class="primary-cell">${esc(charge.description)}</td><td>${esc(CATEGORY_LABELS[charge.category] || charge.category)}</td><td>${esc(band?.name || 'Exploitation')}</td><td>${currency(charge.amount)}</td>
-      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">Ô£ò</button></td></tr>`;
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`;
   }).join('');
   const total = sum(charges, (charge) => charge.amount);
-  return `<div class="page-heading"><div><h1>Charges dÔÇÖexploitation</h1><p>Centralisez les d├®penses directes et communes de la ferme.</p></div><button class="primary-button" data-action="new-charge"><span class="plus">+</span> Ajouter une charge</button></div>
-    <section class="metrics-grid">${metricCard('Charges enregistr├®es', number(charges.length), 'D├®penses hors aliment', 'expenses')}${metricCard('Total des charges', currency(total), 'Bandes actives et exploitation', 'money')}${metricCard('Co├╗ts des bandes', currency(sum(bands, (band) => bandCost(band, snapshot))), 'Poussins, transport, aliment et soins', 'bird')}${metricCard('D├®penses g├®n├®rales', currency(sum(charges.filter((item) => !item.batch_id), (item) => item.amount)), 'Non affect├®es ├á un lot', 'stock')}</section>
-    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} charge${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archiv├®e${archivedCount > 1 ? 's' : ''} : historique conserv├® dans les statistiques annuelles.</p>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Journal des charges</h2><p>Les aliments consomm├®s sont calcul├®s dans le co├╗t de chaque bande.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libell├®</th><th>Cat├®gorie</th><th>Affectation</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-dÔÇÖ┼ôuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
+  return `<div class="page-heading"><div><h1>Charges d’exploitation</h1><p>Centralisez les dépenses directes et communes de la ferme.</p></div><button class="primary-button" data-action="new-charge"><span class="plus">+</span> Ajouter une charge</button></div>
+    <section class="metrics-grid">${metricCard('Charges enregistrées', number(charges.length), 'Dépenses hors aliment', 'expenses')}${metricCard('Total des charges', currency(total), 'Bandes actives et exploitation', 'money')}${metricCard('Coûts des bandes', currency(sum(bands, (band) => bandCost(band, snapshot))), 'Poussins, transport, aliment et soins', 'bird')}${metricCard('Dépenses générales', currency(sum(charges.filter((item) => !item.batch_id), (item) => item.amount)), 'Non affectées à un lot', 'stock')}</section>
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} charge${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : historique conservé dans les statistiques annuelles.</p>` : ''}
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Journal des charges</h2><p>Les aliments consommés sont calculés dans le coût de chaque bande.</p></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Affectation</th><th>Montant</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Aucune charge saisie', 'Ajoutez le chauffage, la main-d’œuvre, les soins ou les frais de livraison.', '<button class="primary-button" data-action="new-charge">Ajouter une charge</button>')}</section>`;
 }
 
 
@@ -1162,14 +1162,14 @@ function renderAnnualStats(snapshot) {
   const yearCharts = yearStats.map((item, index) => `
     <article class="stats-year">
       <header class="stats-year-head">
-        <div><h3>${esc(item.year)}</h3><p>${number(item.bands)} bande${item.bands > 1 ? 's' : ''} ┬À ${number(item.initial)} sujets mis en place ┬À ${number(item.sold)} vendus</p></div>
-        <span class="status-pill ${item.profit >= 0 ? '' : 'danger'}">${item.profit >= 0 ? 'Marge positive' : 'Marge n├®gative'}</span>
+        <div><h3>${esc(item.year)}</h3><p>${number(item.bands)} bande${item.bands > 1 ? 's' : ''} · ${number(item.initial)} sujets mis en place · ${number(item.sold)} vendus</p></div>
+        <span class="status-pill ${item.profit >= 0 ? '' : 'danger'}">${item.profit >= 0 ? 'Marge positive' : 'Marge négative'}</span>
       </header>
       <div class="stats-bars">
         ${statBarRow('Recettes', item.revenue, maxYearValue, 'revenue', currency(item.revenue), 40)}
-        ${statBarRow('D├®penses', item.costs, maxYearValue, 'expense', currency(item.costs), 140)}
+        ${statBarRow('Dépenses', item.costs, maxYearValue, 'expense', currency(item.costs), 140)}
         ${statBarRow('Marge nette', item.profit, maxYearValue, item.profit >= 0 ? 'margin' : 'margin-negative', currency(item.profit), 240)}
-        ${statBarRow('Mortalit├®', item.rate, maxMortality, 'mortality', `${number(item.rate, 1)} %`, 340 + index * 30)}
+        ${statBarRow('Mortalité', item.rate, maxMortality, 'mortality', `${number(item.rate, 1)} %`, 340 + index * 30)}
       </div>
     </article>`).join('');
 
@@ -1186,36 +1186,36 @@ function renderAnnualStats(snapshot) {
   const bandCharts = bandStats.map((item, index) => `
     <article class="stats-band-row">
       <header class="stats-band-head">
-        <div><strong>${esc(item.band.name)}</strong>${isArchived(item.band) ? ' <span class="status-pill neutral">Archiv├®e</span>' : ''}<span class="stats-band-meta">${esc(item.band.strain || 'Souche non pr├®cis├®e')} ┬À ${number(item.band.initial_count)} poussins ┬À mortalit├® ${number(item.rate, 1)} %</span></div>
+        <div><strong>${esc(item.band.name)}</strong>${isArchived(item.band) ? ' <span class="status-pill neutral">Archivée</span>' : ''}<span class="stats-band-meta">${esc(item.band.strain || 'Souche non précisée')} · ${number(item.band.initial_count)} poussins · mortalité ${number(item.rate, 1)} %</span></div>
         <span class="stats-band-profit ${item.profit >= 0 ? 'positive' : 'low-stock'}">${currency(item.profit)}</span>
       </header>
       <div class="stats-bars compact">
         ${statBarRow('Recettes', item.revenue, maxBandValue, 'revenue', currency(item.revenue), 30 + index * 15)}
-        ${statBarRow('D├®penses', item.costs, maxBandValue, 'expense', currency(item.costs), 100 + index * 15)}
+        ${statBarRow('Dépenses', item.costs, maxBandValue, 'expense', currency(item.costs), 100 + index * 15)}
       </div>
     </article>`).join('');
 
   const totalRevenue = sum(snapshot.sales, (sale) => sale.total_amount);
   const totalCosts = sum(snapshot.bands, (band) => bandCost(band, snapshot)) + sum(snapshot.charges.filter((c) => !c.batch_id), (c) => c.amount);
   const hasHistory = snapshot.bands.length || snapshot.sales.length || snapshot.charges.length;
-  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan complet : bandes actives et archiv├®es restent comptabilis├®es ici.</p></div></div>
+  return `<div class="page-heading"><div><h1>Statistiques annuelles</h1><p>Bilan complet : bandes actives et archivées restent comptabilisées ici.</p></div></div>
     <section class="metrics-grid">
-      ${metricCard('Chiffre dÔÇÖaffaires total', currency(totalRevenue), 'Toutes ann├®es', 'money')}
-      ${metricCard('D├®penses totales', currency(totalCosts), 'Toutes ann├®es', 'expenses')}
-      ${metricCard('B├®n├®fice total', currency(totalRevenue - totalCosts), 'Toutes ann├®es', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
-      ${metricCard('Bandes cr├®├®es', number(snapshot.bands.length), 'Actives et archiv├®es', 'bands')}
+      ${metricCard('Chiffre d’affaires total', currency(totalRevenue), 'Toutes années', 'money')}
+      ${metricCard('Dépenses totales', currency(totalCosts), 'Toutes années', 'expenses')}
+      ${metricCard('Bénéfice total', currency(totalRevenue - totalCosts), 'Toutes années', 'money', (totalRevenue - totalCosts) >= 0 ? 'positive' : 'low-stock')}
+      ${metricCard('Bandes créées', number(snapshot.bands.length), 'Actives et archivées', 'bands')}
     </section>
     ${hasHistory ? `<section class="panel stats-viz-panel">
-      <div class="panel-header"><div><h2>Performance par ann├®e</h2><p>Recettes, d├®penses, marge nette et mortalit├® ÔÇö graphiques anim├®s, toutes bandes confondues.</p></div></div>
+      <div class="panel-header"><div><h2>Performance par année</h2><p>Recettes, dépenses, marge nette et mortalité — graphiques animés, toutes bandes confondues.</p></div></div>
       <div class="stats-year-list">${yearCharts}</div>
-      <div class="stats-legend"><span><i class="legend-dot revenue"></i> Recettes</span><span><i class="legend-dot expense"></i> D├®penses</span><span><i class="legend-dot margin"></i> Marge nette</span><span><i class="legend-dot mortality"></i> Mortalit├®</span></div>
+      <div class="stats-legend"><span><i class="legend-dot revenue"></i> Recettes</span><span><i class="legend-dot expense"></i> Dépenses</span><span><i class="legend-dot margin"></i> Marge nette</span><span><i class="legend-dot mortality"></i> Mortalité</span></div>
     </section>
     <section class="panel stats-viz-panel">
-      <div class="panel-header"><div><h2>Performance par bande</h2><p>Chaque lot, actif ou archiv├®, avec ses recettes et ses d├®penses. LÔÇÖhistorique des bandes archiv├®es reste ainsi consultable.</p></div></div>
-      ${bandCharts ? `<div class="stats-band-list">${bandCharts}</div>` : emptyState('Aucune bande ├á comparer', 'Les performances appara├«tront d├¿s la cr├®ation dÔÇÖune bande.')}
-    </section>` : emptyState('Aucun historique statistique', 'Cr├®ez une bande, saisissez des charges et des ventes pour alimenter les statistiques.')}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par ann├®e</h2><p>Recettes, d├®penses et r├®sultats consolid├®s.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Ann├®e</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalit├®</th><th>Sujets vendus</th><th>Chiffre dÔÇÖaffaires</th><th>D├®penses</th><th>B├®n├®fice</th></tr></thead><tbody>${bandsTableRows}</tbody></table></div>
+      <div class="panel-header"><div><h2>Performance par bande</h2><p>Chaque lot, actif ou archivé, avec ses recettes et ses dépenses. L’historique des bandes archivées reste ainsi consultable.</p></div></div>
+      ${bandCharts ? `<div class="stats-band-list">${bandCharts}</div>` : emptyState('Aucune bande à comparer', 'Les performances apparaîtront dès la création d’une bande.')}
+    </section>` : emptyState('Aucun historique statistique', 'Créez une bande, saisissez des charges et des ventes pour alimenter les statistiques.')}
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Bilan par année</h2><p>Recettes, dépenses et résultats consolidés.</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Année</th><th>Bandes</th><th>Sujets mis en place</th><th>Mortalité</th><th>Sujets vendus</th><th>Chiffre d’affaires</th><th>Dépenses</th><th>Bénéfice</th></tr></thead><tbody>${bandsTableRows}</tbody></table></div>
     </section>`;
 }
 
@@ -1229,8 +1229,8 @@ function strToBytes(value) {
 function normalizeAscii(value) {
   return String(value ?? '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/┼ô/g, 'oe').replace(/┼Æ/g, 'OE')
-    .replace(/├ª/g, 'ae').replace(/├å/g, 'AE')
+    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE')
     .replace(/[\u00a0\u2007\u2009\u202f]/g, ' ');
 }
 
@@ -1242,8 +1242,8 @@ function pdfSafe(value) {
     .replace(/\u2026/g, '...')
     .replace(/[\u00a0\u2007\u2009\u202f]/g, ' ')
     .replace(/\u20ac/g, '\x80')
-    .replace(/┼ô/g, 'oe').replace(/┼Æ/g, 'OE')
-    .replace(/├ª/g, 'ae').replace(/├å/g, 'AE')
+    .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
+    .replace(/æ/g, 'ae').replace(/Æ/g, 'AE')
     .replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
 }
 
@@ -1281,15 +1281,15 @@ function buildReceiptPdf(sale, band, options = {}) {
   const perHead = Number(sale.price_per_head) || 0;
   const weight = Number(sale.total_weight_kg) || 0;
   const priceKg = Number(sale.price_per_kg) || 0;
-  const payment = PAYMENT_LABELS[sale.payment_method] || 'Esp├¿ces';
+  const payment = PAYMENT_LABELS[sale.payment_method] || 'Espèces';
   const client = sale.client_name || 'Vente comptoir';
-  const receiptNo = String(sale.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || 'ÔÇö';
+  const receiptNo = String(sale.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || '—';
   const title = options.title || 'TICKET DE CAISSE';
   const note = options.note || 'Merci de votre confiance !';
   const totalLabel = options.totalLabel || 'TOTAL';
-  const paidLabel = options.paidLabel || 'MONTANT R├ëGL├ë';
+  const paidLabel = options.paidLabel || 'MONTANT RÉGLÉ';
   const dueLabel = options.dueLabel || 'SOLDE RESTANT';
-  const dueZeroLabel = options.dueZeroLabel || 'SOLD├ë';
+  const dueZeroLabel = options.dueZeroLabel || 'SOLDÉ';
 
   const items = [];
   const addLine = (text = '', { bold = false, size = BASE_SIZE, align = 'left', gap = 0 } = {}) => {
@@ -1306,11 +1306,11 @@ function buildReceiptPdf(sale, band, options = {}) {
 
   addLine('VOLAILLE CHEZ TALL', { bold: true, size: 11, align: 'center' });
   addLine('Poulets de chair', { size: 8, align: 'center' });
-  addLine('Kalaban Coura ACI ÔÇö Bamako', { size: 8, align: 'center' });
-  addLine('T├®l : +223 78 31 48 18', { size: 8, align: 'center', gap: 2 });
+  addLine('Kalaban Coura ACI — Bamako', { size: 8, align: 'center' });
+  addLine('Tél : +223 78 31 48 18', { size: 8, align: 'center', gap: 2 });
   addRule('=');
   addLine(title, { bold: true, size: 10, align: 'center' });
-  addLine(`Re├ºu n┬░ ${receiptNo}`, { size: 7, align: 'center', gap: 1 });
+  addLine(`Reçu n° ${receiptNo}`, { size: 7, align: 'center', gap: 1 });
   addLine('');
   addField('Date', dateLabel(sale.sale_date));
   const time = sale.created_at ? new Date(sale.created_at) : new Date();
@@ -1318,30 +1318,30 @@ function buildReceiptPdf(sale, band, options = {}) {
     addField('Heure', new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(time));
   }
   addField('Client', client);
-  if (sale.client_phone) addField('T├®l├®phone', sale.client_phone);
+  if (sale.client_phone) addField('Téléphone', sale.client_phone);
   if (sale.client_address) addField('Adresse', sale.client_address);
   if (band && band.name) addField('Bande', band.name);
   addRule('-');
-  addLine('D├ëSIGNATION', { bold: true });
+  addLine('DÉSIGNATION', { bold: true });
   addLine('Poulets de chair');
   if (perHead > 0) {
-    addLine(`  ${number(heads)} t├¬te${heads > 1 ? 's' : ''} ├ù ${currency(perHead)}`);
+    addLine(`  ${number(heads)} tête${heads > 1 ? 's' : ''} × ${currency(perHead)}`);
   } else {
-    addLine(`  ${number(weight, 1)} kg ├ù ${currency(priceKg)}/kg`);
+    addLine(`  ${number(weight, 1)} kg × ${currency(priceKg)}/kg`);
   }
   addLine('');
   addRule('=');
   addPair(totalLabel, currency(total), { bold: true });
   addPair(paidLabel, currency(paid));
   addPair(dueLabel, due > 0 ? currency(due) : dueZeroLabel, { bold: due > 0 });
-  addLine(`R├¿glement : ${payment}`, { gap: 2 });
+  addLine(`Règlement : ${payment}`, { gap: 2 });
   addRule('-');
   wrapWords(note, MAX_CHARS).forEach((line, index) => {
     addLine(line, { bold: true, align: 'center', gap: index ? 0 : 2 });
   });
-  addLine('Vos poulets frais, de la ferme ├á votre table.', { size: 7, align: 'center' });
-  addLine('Volaille chez TALL ÔÇö Kalaban Coura ACI', { size: 7, align: 'center' });
-  addLine('T├®l : +223 78 31 48 18', { size: 7, align: 'center' });
+  addLine('Vos poulets frais, de la ferme à votre table.', { size: 7, align: 'center' });
+  addLine('Volaille chez TALL — Kalaban Coura ACI', { size: 7, align: 'center' });
+  addLine('Tél : +223 78 31 48 18', { size: 7, align: 'center' });
   addLine('Ce ticket fait foi de votre achat.', { size: 7, align: 'center', gap: 2 });
 
   const textHeight = items.reduce((height, item) => height + item.gap + item.size * LINE_HEIGHT, 0);
@@ -1470,25 +1470,25 @@ function downloadReceipt(saleId, button) {
 async function openCreditsDialog() {
   const snapshot = await getSnapshot();
   const outstanding = snapshot.sales.filter((sale) => Number(sale.total_amount) - Number(sale.paid_amount) > 0);
-  if (!outstanding.length) { toast('Aucun cr├®dit client en cours.'); return; }
+  if (!outstanding.length) { toast('Aucun crédit client en cours.'); return; }
   const body = `
     <div class="dialog-form">
-      <h3>Cr├®dits clients</h3>
-      <p>Cliquez sur un r├¿glement pour justifier le paiement du reste.</p>
+      <h3>Crédits clients</h3>
+      <p>Cliquez sur un règlement pour justifier le paiement du reste.</p>
       ${outstanding.map((sale) => {
         const due = Number(sale.total_amount) - Number(sale.paid_amount);
         return `<div class="cost-preview" style="display:block;margin-bottom:10px">
-          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> ÔÇö ${dateLabel(sale.sale_date)}</div>
-          <div>Reste ├á payer : ${currency(due)}</div>
+          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
+          <div>Reste à payer : ${currency(due)}</div>
           <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-            <input type="number" min="0" step="1" max="${due}" placeholder="Montant pay├®" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
+            <input type="number" min="0" step="1" max="${due}" placeholder="Montant payé" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
             <button class="primary-button" type="button" data-action="record-credit-payment" data-sale-id="${esc(sale.id)}">Enregistrer</button>
           </div>
         </div>`;
       }).join('')}
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
     </div>`;
-  setDialog('Cr├®dits clients', 'Justifiez les paiements restants.', body);
+  setDialog('Crédits clients', 'Justifiez les paiements restants.', body);
 }
 
 async function recordCreditPayment(saleId, button) {
@@ -1499,13 +1499,13 @@ async function recordCreditPayment(saleId, button) {
   const sale = snapshot.sales.find((item) => item.id === saleId);
   if (!sale) { toast('Vente introuvable.', true); return; }
   const due = Number(sale.total_amount) - Number(sale.paid_amount);
-  if (amount > due) { toast('Le montant d├®passe le reste ├á payer.', true); return; }
+  if (amount > due) { toast('Le montant dépasse le reste à payer.', true); return; }
   const newPaid = Number(sale.paid_amount) + amount;
   const updated = { ...sale, paid_amount: newPaid, payment_status: newPaid >= Number(sale.total_amount) ? 'paid' : 'partial' };
   await saveRecord('sales', updated);
-  toast('Paiement enregistr├®.');
+  toast('Paiement enregistré.');
   if (newPaid >= Number(sale.total_amount)) {
-    if (confirm('Solde r├®gl├®. T├®l├®charger le re├ºu ?')) downloadReceipt(saleId);
+    if (confirm('Solde réglé. Télécharger le reçu ?')) downloadReceipt(saleId);
   }
   closeDialog();
   await render();
@@ -1527,27 +1527,27 @@ async function openBandDetail(bandId) {
   const body = `
     <div class="dialog-form">
       <h3>${esc(band.name)}</h3>
-      <p>${esc(band.strain || 'Souche non pr├®cis├®e')} ┬À ${esc(band.supplier || 'Fournisseur non pr├®cis├®')}${archived ? ' ┬À <span class="status-pill neutral">Archiv├®e</span>' : ''}</p>
+      <p>${esc(band.strain || 'Souche non précisée')} · ${esc(band.supplier || 'Fournisseur non précisé')}${archived ? ' · <span class="status-pill neutral">Archivée</span>' : ''}</p>
       <div class="metrics-grid" style="margin:12px 0">
-        ${metricCard('Sujets en ├®levage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
-        ${metricCard('Mortalit├® cumul├®e', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
-        ${metricCard('Chiffre dÔÇÖaffaires', currency(revenue), `${sales.length} vente(s)`, 'money')}
-        ${metricCard('D├®penses', currency(costs), 'Co├╗t cumul├® du lot', 'expenses')}
-        ${metricCard('B├®n├®fice', currency(revenue - costs), 'Apr├¿s vente', 'money')}
+        ${metricCard('Sujets en élevage', number(birds), `Initial : ${number(band.initial_count)}`, 'bird')}
+        ${metricCard('Mortalité cumulée', number(deaths), `${band.initial_count ? number((deaths / band.initial_count) * 100, 1) : 0} %`, 'daily')}
+        ${metricCard('Chiffre d’affaires', currency(revenue), `${sales.length} vente(s)`, 'money')}
+        ${metricCard('Dépenses', currency(costs), 'Coût cumulé du lot', 'expenses')}
+        ${metricCard('Bénéfice', currency(revenue - costs), 'Après vente', 'money')}
       </div>
-      ${archived ? '<p class="archive-note">Bande archiv├®e : ses op├®rations nÔÇÖapparaissent plus dans les menus du quotidien, mais son historique reste comptabilis├® dans les statistiques annuelles.</p>' : ''}
-      <h3>Relev├®s (${logs.length})</h3>
-      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalit├®</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || 'ÔÇö')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relev├®">Ô£ò</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relev├®.</p>'}
+      ${archived ? '<p class="archive-note">Bande archivée : ses opérations n’apparaissent plus dans les menus du quotidien, mais son historique reste comptabilisé dans les statistiques annuelles.</p>' : ''}
+      <h3>Relevés (${logs.length})</h3>
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
       <h3>Ventes (${sales.length})</h3>
       ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
       <h3>Charges (${charges.length})</h3>
-      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libell├®</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">Ô£ò</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
       <div class="dialog-actions">
-        ${archived ? `<button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}">Supprimer d├®finitivement</button>` : ''}
+        ${archived ? `<button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}">Supprimer définitivement</button>` : ''}
         <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
       </div>
     </div>`;
-  setDialog(`D├®tail ÔÇö ${band.name}`, archived ? 'Historique conserv├® ÔÇö bande archiv├®e.' : 'Toutes les informations de la bande.', body);
+  setDialog(`Détail — ${band.name}`, archived ? 'Historique conservé — bande archivée.' : 'Toutes les informations de la bande.', body);
 }
 
 
@@ -1571,8 +1571,8 @@ async function render() {
   $('#connection-label').textContent = navigator.onLine ? 'Synchronisation active' : 'Hors ligne';
   const syncLabel = $('#sync-label');
   if (syncLabel) syncLabel.textContent = session
-    ? (navigator.onLine ? 'Compte TALL synchronis├®' : 'Reconnexion au r├®seau requise')
-    : 'Non connect├®';
+    ? (navigator.onLine ? 'Compte TALL synchronisé' : 'Reconnexion au réseau requise')
+    : 'Non connecté';
   $('.offline-dot').classList.toggle('offline', !navigator.onLine);
   updateAccountUI();
 }
@@ -1600,10 +1600,10 @@ async function openBandForm(bandId = null) {
     band = (await readAll('bands')).find((item) => item.id === bandId);
   }
   const isEdit = Boolean(band);
-  setDialog(isEdit ? 'Modifier la bande' : 'Cr├®er une bande', 'Renseignez le lot et le co├╗t dÔÇÖacquisition ├á la mise en place.', `
+  setDialog(isEdit ? 'Modifier la bande' : 'Créer une bande', 'Renseignez le lot et le coût d’acquisition à la mise en place.', `
     <form class="dialog-form" id="band-form" data-band-id="${esc(band ? band.id : '')}"><div class="form-grid">
       <input type="hidden" name="id" value="${esc(band ? band.id : '')}" />
-      <div class="field"><label for="band-name">Nom de la bande *</label><input id="band-name" name="name" required maxlength="80" placeholder="Ex. Bande Mars ÔÇö b├ótiment 1" value="${esc(band ? band.name : '')}" /></div>
+      <div class="field"><label for="band-name">Nom de la bande *</label><input id="band-name" name="name" required maxlength="80" placeholder="Ex. Bande Mars — bâtiment 1" value="${esc(band ? band.name : '')}" /></div>
       <div class="field"><label for="band-strain">Souche</label><select id="band-strain" name="strain"><option ${band && band.strain==='Ross 308' ? 'selected' : ''}>Ross 308</option><option ${band && band.strain==='Cobb 500' ? 'selected' : ''}>Cobb 500</option><option ${band && band.strain==='Hubbard' ? 'selected' : ''}>Hubbard</option><option ${band && band.strain==='Autre' ? 'selected' : ''}>Autre</option></select></div>
       <div class="field"><label for="band-date">Date de mise en place *</label><input id="band-date" name="arrival_date" type="date" value="${esc((band && band.arrival_date) || today())}" required /></div>
       <div class="field"><label for="band-count-input">Nombre de poussins *</label><input id="band-count-input" name="initial_count" type="number" inputmode="numeric" min="1" step="1" required placeholder="Ex. 1 000" value="${esc(band ? band.initial_count : '')}" /></div>
@@ -1612,8 +1612,8 @@ async function openBandForm(bandId = null) {
       <div class="field"><label for="band-age">Cycle cible (jours)</label><input id="band-age" name="target_age_days" type="number" inputmode="numeric" min="1" max="120" step="1" value="${esc((band && band.target_age_days) || '42')}" /></div>
       <div class="field"><label for="chick-price">Prix unitaire du poussin (FCFA) *</label><input id="chick-price" name="chick_unit_cost" type="number" inputmode="decimal" min="0" step="1" required value="${esc((band && band.chick_unit_cost) || '0')}" /></div>
       <div class="field"><label for="transport-cost">Transport initial (FCFA)</label><input id="transport-cost" name="transport_cost" type="number" inputmode="decimal" min="0" step="1" value="${esc((band && band.transport_cost) || '0')}" /></div>
-      <div class="cost-preview"><span>Co├╗t initial (poussins + transport)</span><strong id="initial-cost-preview">0 FCFA</strong></div>
-      <div class="field full"><span class="field-hint">Le co├╗t total des poussins est calcul├® automatiquement : effectif ├ù prix unitaire. Le transport est comptabilis├® s├®par├®ment dans le co├╗t du lot.</span></div>
+      <div class="cost-preview"><span>Coût initial (poussins + transport)</span><strong id="initial-cost-preview">0 FCFA</strong></div>
+      <div class="field full"><span class="field-hint">Le coût total des poussins est calculé automatiquement : effectif × prix unitaire. Le transport est comptabilisé séparément dans le coût du lot.</span></div>
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">${isEdit ? 'Enregistrer les modifications' : 'Enregistrer la bande'}</button></div></form>`);
   const updatePreview = () => {
     const count = Number($('#band-count-input').value) || 0;
@@ -1628,34 +1628,34 @@ async function openBandForm(bandId = null) {
 async function openDailyForm() {
   const snapshot = await getSnapshot();
   const bands = snapshot.bands.filter(isOpenBand);
-  if (!bands.length) { toast('Cr├®ez dÔÇÖabord une bande avant de saisir un relev├®.', true); return; }
-  setDialog('Saisie quotidienne', 'Les donn├®es sont synchronis├®es avec votre compte, m├¬me sur un autre appareil.', `
+  if (!bands.length) { toast('Créez d’abord une bande avant de saisir un relevé.', true); return; }
+  setDialog('Saisie quotidienne', 'Les données sont synchronisées avec votre compte, même sur un autre appareil.', `
     <form class="dialog-form" id="daily-form"><div class="form-grid">
       <div class="field"><label for="log-band">Bande *</label><select id="log-band" name="batch_id" required>${batchSelect(bands)}</select></div>
-      <div class="field"><label for="log-date">Date du relev├® *</label><input id="log-date" name="log_date" type="date" value="${today()}" max="${today()}" required /></div>
-      <div class="field"><label for="log-mortality">Mortalit├® du jour (sujets)</label><input id="log-mortality" name="mortality" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
-      <div class="field"><label for="log-culls">Tri / r├®formes (sujets)</label><input id="log-culls" name="culls" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
-      <div class="field full"><label for="log-note">Note ou autre observation</label><textarea id="log-note" name="note" maxlength="1000" placeholder="Observation du b├ótiment, temp├®rature, incidentÔÇª"></textarea></div>
-    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer le relev├®</button></div></form>`);
+      <div class="field"><label for="log-date">Date du relevé *</label><input id="log-date" name="log_date" type="date" value="${today()}" max="${today()}" required /></div>
+      <div class="field"><label for="log-mortality">Mortalité du jour (sujets)</label><input id="log-mortality" name="mortality" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
+      <div class="field"><label for="log-culls">Tri / réformes (sujets)</label><input id="log-culls" name="culls" type="number" inputmode="numeric" min="0" step="1" value="0" /></div>
+      <div class="field full"><label for="log-note">Note ou autre observation</label><textarea id="log-note" name="note" maxlength="1000" placeholder="Observation du bâtiment, température, incident…"></textarea></div>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer le relevé</button></div></form>`);
 }
 
 async function openSaleForm() {
   const snapshot = await getSnapshot();
   const bands = snapshot.bands.filter((band) => isOpenBand(band) && activeBirds(band, snapshot) > 0);
-  if (!bands.length) { toast('Aucun sujet disponible ├á la vente. Cr├®ez une bande ou v├®rifiez vos effectifs.', true); return; }
-  setDialog('Nouvelle vente', 'Associez la vente ├á un lot pour assurer la tra├ºabilit├®.', `
+  if (!bands.length) { toast('Aucun sujet disponible à la vente. Créez une bande ou vérifiez vos effectifs.', true); return; }
+  setDialog('Nouvelle vente', 'Associez la vente à un lot pour assurer la traçabilité.', `
     <form class="dialog-form" id="sale-form"><div class="form-grid">
       <div class="field"><label for="sale-band">Bande source *</label><select id="sale-band" name="batch_id" required>${batchSelect(bands)}</select></div>
       <div class="field"><label for="sale-date">Date de vente *</label><input id="sale-date" name="sale_date" type="date" value="${today()}" required /></div>
-      <div class="field"><label for="sale-client-name">Nom du client *</label><input id="sale-client-name" name="client_name" required maxlength="120" placeholder="Ex. Restaurant Le March├®" /></div>
-      <div class="field"><label for="sale-client-phone">Num├®ro de t├®l├®phone</label><input id="sale-client-phone" name="client_phone" type="tel" maxlength="30" placeholder="+221ÔÇª" /></div>
+      <div class="field"><label for="sale-client-name">Nom du client *</label><input id="sale-client-name" name="client_name" required maxlength="120" placeholder="Ex. Restaurant Le Marché" /></div>
+      <div class="field"><label for="sale-client-phone">Numéro de téléphone</label><input id="sale-client-phone" name="client_phone" type="tel" maxlength="30" placeholder="+221…" /></div>
       <div class="field full"><label for="sale-client-address">Adresse</label><input id="sale-client-address" name="client_address" maxlength="200" placeholder="Adresse du client" /></div>
       <div class="field"><label for="sale-heads">Nombre de sujets *</label><input id="sale-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required /></div>
       <div class="field"><label for="sale-weight">Poids moyen unitaire (kg) *</label><input id="sale-weight" name="unit_weight_kg" type="number" inputmode="decimal" min="0.01" step="0.01" value="2" required /></div>
       <div class="field"><label for="sale-price">Prix par kg vif (FCFA) *</label><input id="sale-price" name="price_per_kg" type="number" inputmode="decimal" min="0" step="1" required /></div>
-      <div class="field"><label for="sale-payment">Mode de paiement</label><select id="sale-payment" name="payment_method"><option value="cash">Esp├¿ces</option><option value="mobile_money">Mobile Money</option><option value="transfer">Virement</option><option value="credit">Cr├®dit client</option></select></div>
-      <div class="field"><label for="sale-paid">Montant d├®j├á r├®gl├® (FCFA)</label><input id="sale-paid" name="paid_amount" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
-      <div class="cost-preview"><span>Montant estim├®</span><strong id="sale-total-preview">0 FCFA</strong></div>
+      <div class="field"><label for="sale-payment">Mode de paiement</label><select id="sale-payment" name="payment_method"><option value="cash">Espèces</option><option value="mobile_money">Mobile Money</option><option value="transfer">Virement</option><option value="credit">Crédit client</option></select></div>
+      <div class="field"><label for="sale-paid">Montant déjà réglé (FCFA)</label><input id="sale-paid" name="paid_amount" type="number" inputmode="decimal" min="0" step="1" value="0" /></div>
+      <div class="cost-preview"><span>Montant estimé</span><strong id="sale-total-preview">0 FCFA</strong></div>
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer la vente</button></div></form>`);
   const update = () => {
     const amount = (Number($('#sale-heads').value) || 0) * (Number($('#sale-weight').value) || 0) * (Number($('#sale-price').value) || 0);
@@ -1666,13 +1666,13 @@ async function openSaleForm() {
 
 async function openChargeForm() {
   const bands = (await readAll('bands')).filter(isOpenBand);
-  setDialog('Ajouter une charge', 'Les d├®penses peuvent ├¬tre affect├®es ├á un lot ou ├á toute lÔÇÖexploitation.', `
+  setDialog('Ajouter une charge', 'Les dépenses peuvent être affectées à un lot ou à toute l’exploitation.', `
     <form class="dialog-form" id="charge-form"><div class="form-grid">
       <div class="field"><label for="charge-date">Date *</label><input id="charge-date" name="charge_date" type="date" value="${today()}" required /></div>
-      <div class="field"><label for="charge-category">Cat├®gorie *</label><select id="charge-category" name="category"><option value="health">Sant├® / prophylaxie</option><option value="heating">Chauffage / combustible</option><option value="labor">Main-dÔÇÖ┼ôuvre</option><option value="water_energy">Eau / ├®lectricit├®</option><option value="delivery">Transport livraison client</option><option value="bedding">Liti├¿re</option><option value="maintenance">Entretien</option><option value="other">Autre</option></select></div>
-      <div class="field full"><label for="charge-description">Libell├® *</label><input id="charge-description" name="description" required maxlength="160" placeholder="Ex. Facture ├®lectricit├® du b├ótiment 1" /></div>
+      <div class="field"><label for="charge-category">Catégorie *</label><select id="charge-category" name="category"><option value="health">Santé / prophylaxie</option><option value="heating">Chauffage / combustible</option><option value="labor">Main-d’œuvre</option><option value="water_energy">Eau / électricité</option><option value="delivery">Transport livraison client</option><option value="bedding">Litière</option><option value="maintenance">Entretien</option><option value="other">Autre</option></select></div>
+      <div class="field full"><label for="charge-description">Libellé *</label><input id="charge-description" name="description" required maxlength="160" placeholder="Ex. Facture électricité du bâtiment 1" /></div>
       <div class="field"><label for="charge-amount">Montant (FCFA) *</label><input id="charge-amount" name="amount" type="number" inputmode="decimal" min="1" step="1" required /></div>
-      <div class="field"><label for="charge-band">Affectation</label><select id="charge-band" name="batch_id"><option value="">Exploitation g├®n├®rale</option>${bands.map((band) => `<option value="${esc(band.id)}">${esc(band.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="charge-band">Affectation</label><select id="charge-band" name="batch_id"><option value="">Exploitation générale</option>${bands.map((band) => `<option value="${esc(band.id)}">${esc(band.name)}</option>`).join('')}</select></div>
     </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Annuler</button><button class="primary-button" type="submit">Enregistrer la charge</button></div></form>`);
 }
 
@@ -1704,21 +1704,21 @@ async function handleSubmit(event) {
   } else if (formId === 'daily-form') {
     const snapshot = await getSnapshot();
     const band = snapshot.bands.find((item) => item.id === values.batch_id);
-    if (!band) throw new Error('La bande s├®lectionn├®e nÔÇÖexiste plus.');
+    if (!band) throw new Error('La bande sélectionnée n’existe plus.');
     const used = values.mortality + values.culls;
-    if (used > activeBirds(band, snapshot)) throw new Error('La mortalit├® et le tri d├®passent le nombre de sujets pr├®sents.');
+    if (used > activeBirds(band, snapshot)) throw new Error('La mortalité et le tri dépassent le nombre de sujets présents.');
     if (snapshot.logs.some((log) => log.batch_id === values.batch_id && log.log_date === values.log_date)) {
-      throw new Error('Un relev├® existe d├®j├á pour cette bande et cette date.');
+      throw new Error('Un relevé existe déjà pour cette bande et cette date.');
     }
     const record = { ...base, ...values, feed_cost: 0 };
     await saveRecords([{ store: 'daily_logs', record }]);
   } else if (formId === 'sale-form') {
     const snapshot = await getSnapshot();
     const band = snapshot.bands.find((item) => item.id === values.batch_id);
-    if (!band || values.heads > activeBirds(band, snapshot)) throw new Error(`Quantit├® indisponible. ${band ? `${activeBirds(band, snapshot)} sujets` : 'V├®rifiez la bande'} disponibles.`);
+    if (!band || values.heads > activeBirds(band, snapshot)) throw new Error(`Quantité indisponible. ${band ? `${activeBirds(band, snapshot)} sujets` : 'Vérifiez la bande'} disponibles.`);
     const totalWeight = values.heads * values.unit_weight_kg;
     const totalAmount = totalWeight * values.price_per_kg;
-    if (values.paid_amount > totalAmount) throw new Error('Le r├¿glement ne peut pas d├®passer le montant de la vente.');
+    if (values.paid_amount > totalAmount) throw new Error('Le règlement ne peut pas dépasser le montant de la vente.');
     const sale = await saveRecord('sales', {
       ...base, ...values, client_id: values.client_id || null,
       total_weight_kg: totalWeight, total_amount: totalAmount, payment_status: values.paid_amount >= totalAmount ? 'paid' : 'partial',
@@ -1729,7 +1729,7 @@ async function handleSubmit(event) {
   }
   closeDialog();
   await render();
-  toast('Enregistr├® et synchronis├® sur votre compte.');
+  toast('Enregistré et synchronisé sur votre compte.');
   publishStock({ silent: true }).catch((error) => console.error(error));
   if (followUp?.type === 'sale') openDirectSaleDialog(followUp.sale, followUp.band);
 }
@@ -1773,9 +1773,9 @@ async function loadOrders({ force = false } = {}) {
 }
 
 async function publishSellingStock({ heads, min, max }) {
-  if (!supabaseReady()) throw new Error('Supabase nÔÇÖest pas configur├®.');
+  if (!supabaseReady()) throw new Error('Supabase n’est pas configuré.');
   const payload = {
-    stock_heads: Math.max(0, Number(heads) || 0),
+    stock_heads: Math.max(0, Math.floor(Number(heads) || 0)),
     min_price: Math.min(25000, Math.max(2500, Number(min) || 2500)),
     max_price: Math.min(25000, Math.max(2500, Number(max) || 25000)),
     updated_at: new Date().toISOString(),
@@ -1791,6 +1791,33 @@ async function publishSellingStock({ heads, min, max }) {
   ordersState.publicStock = { ...(ordersState.publicStock || {}), ...payload, id: 1 };
 }
 
+async function loadPublicStock() {
+  if (!supabaseReady()) return null;
+  try {
+    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,updated_at');
+    ordersState.publicStock = Array.isArray(rows) && rows.length ? rows[0] : null;
+  } catch {
+    ordersState.publicStock = null;
+  }
+  return ordersState.publicStock;
+}
+
+// Déduit du stock mis en vente la quantité d'une commande validée (sans toucher aux prix).
+async function deductSellingStock(quantity) {
+  if (!supabaseReady()) return;
+  const asked = Math.max(0, Math.floor(Number(quantity) || 0));
+  if (!asked) return;
+  const config = await loadPublicStock();
+  const current = Math.max(0, Math.floor(Number(config?.stock_heads) || 0));
+  if (!current) return;
+  const next = Math.max(0, current - asked);
+  const payload = { stock_heads: next, updated_at: new Date().toISOString() };
+  await supabaseRequest('/rest/v1/app_config?id=eq.1', {
+    method: 'PATCH', body: payload, headers: { Prefer: 'return=minimal' },
+  });
+  ordersState.publicStock = { ...(ordersState.publicStock || config || {}), ...payload, id: 1 };
+}
+
 async function openSellingModal() {
   const snapshot = await getSnapshot();
   const liveStock = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
@@ -1800,17 +1827,17 @@ async function openSellingModal() {
   const currentMax = Number(current.max_price) || 25000;
   const fixed = currentMin === currentMax;
   let submitted = false;
-  setDialog('Mise en vente', 'D├®finissez les t├¬tes et le prix propos├®s aux clients sur la page publique.', `
+  setDialog('Mise en vente', 'Définissez les têtes et le prix proposés aux clients sur la page publique.', `
     <form class="dialog-form" id="selling-form"><div class="form-grid">
-      <div class="field full"><label for="selling-heads">Nombre de t├¬tes destin├®es ├á la vente *</label>
+      <div class="field full"><label for="selling-heads">Nombre de têtes destinées à la vente *</label>
         <input id="selling-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required value="${esc(currentHeads)}" />
-        <small class="field-hint">Stock disponible dans lÔÇÖ├®levage : ${number(liveStock)} t├¬te${liveStock > 1 ? 's' : ''}.</small></div>
+        <small class="field-hint">Stock disponible dans l’élevage : ${number(liveStock)} tête${liveStock > 1 ? 's' : ''}.</small></div>
       <div class="field full"><label for="selling-mode">Mode de prix</label>
         <select id="selling-mode" name="mode">
-          <option value="fixed" ${fixed ? 'selected' : ''}>Prix fixe par t├¬te</option>
+          <option value="fixed" ${fixed ? 'selected' : ''}>Prix fixe par tête</option>
           <option value="range" ${!fixed ? 'selected' : ''}>Intervalle de prix</option>
         </select></div>
-      <div class="field" data-selling-fixed><label for="selling-price">Prix par t├¬te (FCFA) *</label>
+      <div class="field" data-selling-fixed><label for="selling-price">Prix par tête (FCFA) *</label>
         <input id="selling-price" name="price" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(fixed ? currentMin : currentMin)}" /></div>
       <div class="field" data-selling-min hidden><label for="selling-min">Prix minimum (FCFA) *</label>
         <input id="selling-min" name="min" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(currentMin)}" /></div>
@@ -1839,15 +1866,16 @@ async function openSellingModal() {
     let min, max;
     if (isRange) { min = Number($('#selling-min')?.value) || 0; max = Number($('#selling-max')?.value) || 0; }
     else { min = max = Number($('#selling-price')?.value) || 0; }
-    if (heads < 1) { toast('Indiquez un nombre de t├¬tes valide.', true); return; }
-    if (min < 2500 || max > 25000 || min > max) { toast('Prix invalide : 2 500 ├á 25 000 FCFA, minimum Ôëñ maximum.', true); return; }
+    if (heads < 1) { toast('Indiquez un nombre de têtes valide.', true); return; }
+    if (heads > liveStock) { toast(`Vous ne pouvez pas mettre en vente plus de ${number(liveStock)} tête${liveStock > 1 ? 's' : ''} (stock de l’élevage).`, true); return; }
+    if (min < 2500 || max > 25000 || min > max) { toast('Prix invalide : 2 500 à 25 000 FCFA, minimum ≤ maximum.', true); return; }
     const button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
       await publishSellingStock({ heads, min, max });
       submitted = true;
       closeDialog();
-      toast(`Mise en vente activ├®e : ${number(heads)} t├¬te${heads > 1 ? 's' : ''} ├á ${isRange ? `${currency(min)} ÔÇô ${currency(max)}` : currency(min)}.`);
+      toast(`Mise en vente activée : ${number(heads)} tête${heads > 1 ? 's' : ''} à ${isRange ? `${currency(min)} – ${currency(max)}` : currency(min)}.`);
       await render();
     } catch (error) {
       toast(error?.message || 'Publication impossible.', true);
@@ -1868,39 +1896,48 @@ async function openSellingModal() {
 
 async function stopSelling() {
   const sw = $('#selling-switch');
-  if (!confirm('D├®sactiver la mise en vente publique ? Le stock affich├® passera ├á 0.')) {
+  if (!confirm('Désactiver la mise en vente publique ? Le stock affiché passera à 0.')) {
     if (sw) sw.checked = true;
     return;
   }
   try {
     const current = ordersState.publicStock || {};
     await publishSellingStock({ heads: 0, min: Number(current.min_price) || 2500, max: Number(current.max_price) || 25000 });
-    toast('Mise en vente d├®sactiv├®e.');
+    toast('Mise en vente désactivée.');
     await render();
   } catch (error) {
-    toast(error?.message || 'Impossible de d├®sactiver la mise en vente.', true);
+    toast(error?.message || 'Impossible de désactiver la mise en vente.', true);
     if (sw) sw.checked = true;
   }
 }
 async function publishStock({ silent = false } = {}) {
   if (!supabaseReady()) {
-    if (!silent) toast('Supabase nÔÇÖest pas configur├®.', true);
+    if (!silent) toast('Supabase n’est pas configuré.', true);
     return;
   }
+  // Les ventes et relevés quotidiens ne doivent jamais écraser la mise en vente
+  // configurée par le gérant (nombre de têtes + prix).
+  if (silent) return;
   const snapshot = await getSnapshot();
   const heads = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
+  const current = ordersState.publicStock || {};
   const payload = {
-    stock_heads: heads,
-    min_price: Number(SUPABASE.minPrice) || 2500,
-    max_price: Number(SUPABASE.maxPrice) || 25000,
+    stock_heads: Math.max(0, Math.floor(heads)),
+    min_price: Number(current.min_price) || Number(SUPABASE.minPrice) || 2500,
+    max_price: Number(current.max_price) || Number(SUPABASE.maxPrice) || 25000,
     updated_at: new Date().toISOString(),
   };
+  if (payload.min_price > payload.max_price) {
+    const swap = payload.min_price;
+    payload.min_price = payload.max_price;
+    payload.max_price = swap;
+  }
   await supabaseRequest('/rest/v1/app_config?id=eq.1', {
     method: 'PATCH', body: payload, headers: { Prefer: 'return=minimal' },
   });
-  ordersState.publicStock = payload;
+  ordersState.publicStock = { ...(ordersState.publicStock || {}), ...payload, id: 1 };
   if (!silent) {
-    toast(`Stock publi├® : ${number(heads)} sujets visibles sur la page publique.`);
+    toast(`Stock synchronisé : ${number(payload.stock_heads)} sujets visibles sur la page publique.`);
     await render();
   }
 }
@@ -1940,16 +1977,16 @@ function buildTransactionMessage({ status, clientName, items, total, paid, remai
     '',
     `Statut : ${status}`,
     '',
-    'D├®tail de la transaction :',
+    'Détail de la transaction :',
   ];
   for (const item of items) {
-    const unit = Number(item.unitPrice) > 0 ? ` ├ù ${currency(item.unitPrice)}` : '';
-    lines.push(`ÔÇó ${item.label} : ${number(item.quantity)}${unit} = ${currency(item.total)}`);
+    const unit = Number(item.unitPrice) > 0 ? ` × ${currency(item.unitPrice)}` : '';
+    lines.push(`• ${item.label} : ${number(item.quantity)}${unit} = ${currency(item.total)}`);
   }
   lines.push(
     '',
     `Total : ${currency(total)}`,
-    `Total pay├® : ${currency(paid)}`,
+    `Total payé : ${currency(paid)}`,
     `Solde restant : ${currency(remaining)}`,
   );
   if (neighborhood) lines.push(`Livraison : ${neighborhood}`);
@@ -1987,19 +2024,19 @@ function openTransactionDialog({
   neighborhood = '', extra = '', receipt, receiptBand = null, receiptOptions = {},
 }) {
   const message = buildTransactionMessage({ status, clientName, items, total, paid, remaining, neighborhood, extra });
-  const lines = items.map((item) => `<div class="transaction-line"><span>${esc(item.label)} ├ù ${number(item.quantity)}</span><span>${currency(item.total)}</span></div>`).join('');
+  const lines = items.map((item) => `<div class="transaction-line"><span>${esc(item.label)} × ${number(item.quantity)}</span><span>${currency(item.total)}</span></div>`).join('');
   setDialog(title, subtitle, `
     <div class="dialog-form">
       <div class="transaction-summary">
-        <strong>${esc(clientName)}${clientPhone ? ` ┬À ${esc(clientPhone)}` : ''}</strong>
+        <strong>${esc(clientName)}${clientPhone ? ` · ${esc(clientPhone)}` : ''}</strong>
         ${lines}
-        <div class="transaction-line"><span>Total pay├®</span><span>${currency(paid)}</span></div>
+        <div class="transaction-line"><span>Total payé</span><span>${currency(paid)}</span></div>
         <div class="transaction-line"><span>Solde restant</span><span>${currency(remaining)}</span></div>
       </div>
       <div class="field full"><label for="transaction-message">Message WhatsApp</label><textarea id="transaction-message" rows="7">${esc(message)}</textarea></div>
       <div class="transaction-actions">
         <a class="primary-button" id="transaction-whatsapp" href="${esc(whatsappLink(clientPhone, message))}" target="_blank" rel="noopener">Envoyer par WhatsApp</a>
-        <button class="secondary-button" type="button" id="transaction-receipt">T├®l├®charger le re├ºu</button>
+        <button class="secondary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>
       </div>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
     </div>`);
@@ -2010,7 +2047,7 @@ function openTransactionDialog({
   }
   $('#transaction-receipt')?.addEventListener('click', () => {
     generateReceipt(receipt, receiptBand, receiptOptions);
-    toast('Re├ºu PDF t├®l├®charg├®.');
+    toast('Reçu PDF téléchargé.');
   });
 }
 
@@ -2019,20 +2056,20 @@ function openAcceptedOrderDialog(order, records) {
   const paid = sum(records, (record) => Number(record.paid_amount) || 0);
   const remaining = Math.max(0, total - paid);
   openTransactionDialog({
-    title: 'Commande accept├®e',
-    subtitle: 'Envoyez la confirmation au client ou t├®l├®chargez son re├ºu.',
+    title: 'Commande acceptée',
+    subtitle: 'Envoyez la confirmation au client ou téléchargez son reçu.',
     clientName: order.client_name,
     clientPhone: order.client_phone,
-    status: 'Commande accept├®e Ô£à',
+    status: 'Commande acceptée ✅',
     items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
     total,
     paid,
     remaining,
     neighborhood: order.neighborhood,
-    extra: remaining > 0 ? `Solde ├á r├®gler ├á la livraison : ${currency(remaining)}.` : 'Commande enti├¿rement r├®gl├®e.',
+    extra: remaining > 0 ? `Solde à régler à la livraison : ${currency(remaining)}.` : 'Commande entièrement réglée.',
     receipt: makeOrderReceipt(order, records),
     receiptBand: { name: 'Commande publique' },
-    receiptOptions: { title: 'COMMANDE CONFIRM├ëE' },
+    receiptOptions: { title: 'COMMANDE CONFIRMÉE' },
   });
 }
 
@@ -2056,29 +2093,29 @@ function openRefusedOrderDialog(order) {
     created_at: order.created_at || new Date().toISOString(),
   };
   openTransactionDialog({
-    title: 'Commande refus├®e',
-    subtitle: 'Pr├®venez le client et remettez-lui un justificatif.',
+    title: 'Commande refusée',
+    subtitle: 'Prévenez le client et remettez-lui un justificatif.',
     clientName: order.client_name,
     clientPhone: order.client_phone,
-    status: 'Commande refus├®e',
+    status: 'Commande refusée',
     items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
     total,
     paid: 0,
     remaining: 0,
     neighborhood: order.neighborhood,
-    extra: 'Le stock disponible ne nous permet pas de satisfaire cette commande. Aucun montant nÔÇÖa ├®t├® d├®bit├®.',
+    extra: 'Le stock disponible ne nous permet pas de satisfaire cette commande. Aucun montant n’a été débité.',
     receipt,
     receiptBand: { name: 'Commande publique' },
     receiptOptions: {
-      title: 'COMMANDE REFUS├ëE',
+      title: 'COMMANDE REFUSÉE',
       total,
       paid: 0,
       due: 0,
-      totalLabel: 'MONTANT COMMAND├ë',
-      paidLabel: 'MONTANT VERS├ë',
-      dueLabel: 'MONTANT D├ø',
+      totalLabel: 'MONTANT COMMANDÉ',
+      paidLabel: 'MONTANT VERSÉ',
+      dueLabel: 'MONTANT DÛ',
       dueZeroLabel: 'AUCUN',
-      note: 'Aucun montant nÔÇÖa ├®t├® d├®bit├®. Merci de votre compr├®hension.',
+      note: 'Aucun montant n’a été débité. Merci de votre compréhension.',
       filenamePrefix: 'commande-refusee',
     },
   });
@@ -2091,17 +2128,17 @@ function openDirectSaleDialog(sale, band) {
   const heads = Number(sale.heads) || 0;
   const unitPrice = Number(sale.price_per_head) || (heads ? total / heads : 0);
   openTransactionDialog({
-    title: 'Vente enregistr├®e',
-    subtitle: 'Envoyez le r├®capitulatif au client ou t├®l├®chargez le re├ºu.',
+    title: 'Vente enregistrée',
+    subtitle: 'Envoyez le récapitulatif au client ou téléchargez le reçu.',
     clientName: sale.client_name || 'Client comptoir',
     clientPhone: sale.client_phone || '',
-    status: 'Vente enregistr├®e Ô£à',
-    items: [{ label: band?.name ? `Poulets ÔÇö ${band.name}` : 'Poulets de chair', quantity: heads, unitPrice, total }],
+    status: 'Vente enregistrée ✅',
+    items: [{ label: band?.name ? `Poulets — ${band.name}` : 'Poulets de chair', quantity: heads, unitPrice, total }],
     total,
     paid,
     remaining,
     neighborhood: sale.client_address || '',
-    extra: remaining > 0 ? `Solde ├á r├®gler : ${currency(remaining)}.` : 'Vente enti├¿rement r├®gl├®e. Merci !',
+    extra: remaining > 0 ? `Solde à régler : ${currency(remaining)}.` : 'Vente entièrement réglée. Merci !',
     receipt: sale,
     receiptBand: band,
     receiptOptions: { title: 'TICKET DE CAISSE' },
@@ -2117,7 +2154,12 @@ async function validateOrder(orderId, button) {
     const active = snapshot.bands.filter(isOpenBand);
     const available = sum(active, (band) => activeBirds(band, snapshot));
     if (Number(order.quantity) > available) {
-      throw new Error(`Stock insuffisant : ${number(available)} sujet${available > 1 ? 's' : ''} disponible${available > 1 ? 's' : ''} pour ${number(order.quantity)} demand├®${Number(order.quantity) > 1 ? 's' : ''}.`);
+      throw new Error(`Stock insuffisant : ${number(available)} sujet${available > 1 ? 's' : ''} disponible${available > 1 ? 's' : ''} pour ${number(order.quantity)} demandé${Number(order.quantity) > 1 ? 's' : ''}.`);
+    }
+    const publicStock = await loadPublicStock();
+    const sellingHeads = Math.max(0, Number(publicStock?.stock_heads) || 0);
+    if (sellingHeads > 0 && Number(order.quantity) > sellingHeads) {
+      throw new Error(`Mise en vente insuffisante : ${number(sellingHeads)} poulet${sellingHeads > 1 ? 's' : ''} encore disponible${sellingHeads > 1 ? 's' : ''} en ligne.`);
     }
     const pricePerHead = Number(order.price_per_head) || 0;
     const saleDate = today();
@@ -2171,8 +2213,8 @@ async function validateOrder(orderId, button) {
     order.status = 'validee';
     order.handled_at = new Date().toISOString();
     ordersState.lastFetch = 0;
-    toast(`Commande valid├®e : ${number(order.quantity)} sujets d├®duits du stock.`);
-    await publishStock({ silent: true }).catch((error) => console.error(error));
+    toast(`Commande validée : ${number(order.quantity)} sujets déduits du stock.`);
+    await deductSellingStock(order.quantity).catch((error) => console.error(error));
     await render();
     openAcceptedOrderDialog(order, created.map((entry) => entry.record));
   } catch (error) {
@@ -2218,7 +2260,7 @@ async function restoreOrder(orderId, button) {
     order.status = 'en_attente';
     order.handled_at = null;
     ordersState.lastFetch = 0;
-    toast(`Commande de ${order.client_name} restaur├®e : elle est de nouveau en attente.`);
+    toast(`Commande de ${order.client_name} restaurée : elle est de nouveau en attente.`);
     await render();
   } catch (error) {
     toast(error.message || 'Restauration impossible.', true);
@@ -2231,7 +2273,7 @@ async function copyOrderLink() {
   const url = new URL('./commander.html', location.href).href;
   try {
     await navigator.clipboard.writeText(url);
-    toast('Lien public copi├®.');
+    toast('Lien public copié.');
   } catch {
     setDialog('Lien public', 'Partagez ce lien avec vos clients.', `
       <div class="dialog-form"><div class="field full"><label for="public-link">Lien de commande</label><input id="public-link" readonly value="${esc(url)}" /></div>
@@ -2273,11 +2315,11 @@ async function purgeTrash({ force = false } = {}) {
 }
 
 async function renderOrders(snapshot) {
-  const header = (actions = '') => `<div class="page-heading"><div><h1>Mes Commandes</h1><p>Les demandes envoy├®es depuis le lien public de commande.</p></div><div class="heading-actions">${actions}</div></div>`;
+  const header = (actions = '') => `<div class="page-heading"><div><h1>Mes Commandes</h1><p>Les demandes envoyées depuis le lien public de commande.</p></div><div class="heading-actions">${actions}</div></div>`;
   if (!supabaseReady()) {
-    return `${header()}<section class="panel"><div class="panel-header"><div><h2>Connexion ├á Supabase requise</h2><p>Les commandes ne peuvent pas encore ├¬tre re├ºues.</p></div></div>
+    return `${header()}<section class="panel"><div class="panel-header"><div><h2>Connexion à Supabase requise</h2><p>Les commandes ne peuvent pas encore être reçues.</p></div></div>
       <div class="orders-setup">
-        <p>Renseignez lÔÇÖURL du projet et la cl├® publique <code>anon</code> dans <code>supabase-config.js</code>, puis ex├®cutez <code>supabase/commandes.sql</code> dans le SQL Editor Supabase.</p>
+        <p>Renseignez l’URL du projet et la clé publique <code>anon</code> dans <code>supabase-config.js</code>, puis exécutez <code>supabase/commandes.sql</code> dans le SQL Editor Supabase.</p>
       </div></section>`;
   }
   let error = null;
@@ -2307,8 +2349,8 @@ async function renderOrders(snapshot) {
     const actions = order.status === 'en_attente'
       ? `<button class="primary-button" type="button" data-action="validate-order" data-order-id="${esc(order.id)}">Valider</button><button class="secondary-button danger-outline" type="button" data-action="refuse-order" data-order-id="${esc(order.id)}">Refuser</button>`
       : order.handled_at
-        ? `<span class="orders-handled">Trait├®e le ${dateLabel(String(order.handled_at).slice(0, 10))}</span>`
-        : 'ÔÇö';
+        ? `<span class="orders-handled">Traitée le ${dateLabel(String(order.handled_at).slice(0, 10))}</span>`
+        : '—';
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
       <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
@@ -2328,35 +2370,46 @@ async function renderOrders(snapshot) {
       <td>${esc(order.neighborhood)}</td>
       <td>${number(order.quantity)}</td>
       <td>${currency(total)}</td>
-      <td>${order.handled_at ? dateLabel(String(order.handled_at).slice(0, 10)) : 'ÔÇö'}</td>
+      <td>${order.handled_at ? dateLabel(String(order.handled_at).slice(0, 10)) : '—'}</td>
       <td><span class="status-pill danger">${trashCountdown(order)}</span></td>
       <td class="orders-table-actions"><button class="secondary-button" type="button" data-action="restore-order" data-order-id="${esc(order.id)}">Restaurer</button></td>
     </tr>`;
   }).join('');
   const actions = `<button class="secondary-button" type="button" data-action="copy-order-link">Copier le lien public</button>
     <a class="secondary-button" href="./commander.html" target="_blank" rel="noopener">Ouvrir la page</a>
-    <label class="selling-switch" title="Activer ou d├®sactiver la mise en vente publique">
-      <input type="checkbox" id="selling-switch" ${publicStock && Number(publicStock.stock_heads) > 0 ? 'checked' : ''} />
+    <label class="selling-switch" title="Activer ou désactiver la mise en vente publique">
+      <input type="checkbox" id="selling-switch" ${publicStock && publicStock > 0 ? 'checked' : ''} />
       <span class="switch-track" aria-hidden="true"></span>
       <span class="switch-label">Mise en vente</span>
     </label>
-    <button class="secondary-button" type="button" data-action="publish-stock">Publier le stock</button>
+    <button class="secondary-button" type="button" data-action="publish-stock">Synchroniser avec l’élevage</button>
     <button class="primary-button" type="button" data-action="refresh-orders">Actualiser</button>`;
+  const sellingMin = ordersState.publicStock ? Number(ordersState.publicStock.min_price) || 0 : 0;
+  const sellingMax = ordersState.publicStock ? Number(ordersState.publicStock.max_price) || 0 : 0;
+  const sellingPrice = !sellingMin || !sellingMax
+    ? 'prix non défini'
+    : sellingMin === sellingMax
+      ? `prix fixe ${currency(sellingMin)}`
+      : `intervalle ${currency(sellingMin)} – ${currency(sellingMax)}`;
+  const sellingLabel = publicStock === null
+    ? 'Mise en vente non configurée'
+    : (publicStock > 0 ? `${number(publicStock)} tête${publicStock > 1 ? 's' : ''} en ligne` : 'Mise en vente désactivée (stock à 0)');
   return `${header(actions)}
     <section class="metrics-grid">
-      ${metricCard('En attente', number(pending.length), '├Ç traiter', 'orders', pending.length ? 'low-stock' : '')}
-      ${metricCard('Valid├®es', number(validated.length), 'Bascul├®es dans les ventes', 'bird', 'positive')}
-      ${metricCard('Corbeille', number(refused.length), 'Purge automatique apr├¿s 72 h', 'expenses')}
-      ${metricCard('Stock publi├®', publicStock === null ? 'ÔÇö' : number(publicStock), `${number(liveStock)} sujets dans lÔÇÖ├®levage`, 'stock')}
+      ${metricCard('En attente', number(pending.length), 'À traiter', 'orders', pending.length ? 'low-stock' : '')}
+      ${metricCard('Validées', number(validated.length), 'Basculées dans les ventes', 'bird', 'positive')}
+      ${metricCard('Corbeille', number(refused.length), 'Purge automatique après 72 h', 'expenses')}
+      ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
-    ${error ? `<p class="orders-error">Impossible de rafra├«chir les commandes : ${esc(error)}</p>` : ''}
-    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes ├á traiter</h2><p>${open.length} commande${open.length > 1 ? 's' : ''} en attente ┬À les commandes valid├®es rejoignent automatiquement lÔÇÖonglet Ventes.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Quartier</th><th>Qt├®</th><th>Prix / t├¬te</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    <p class="orders-selling-note">Mise en vente : <strong>${esc(sellingLabel)}</strong> · ${esc(sellingPrice)}${publicStock > 0 ? ' · <a href="./commander.html" target="_blank" rel="noopener">voir la page client</a>' : ''}</p>
+    ${error ? `<p class="orders-error">Impossible de rafraîchir les commandes : ${esc(error)}</p>` : ''}
+    <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes à traiter</h2><p>${open.length} commande${open.length > 1 ? 's' : ''} en attente · les commandes validées rejoignent automatiquement l’onglet Ventes.</p></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Prix / tête</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : emptyState('Aucune commande en attente', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>
-    <section class="panel table-panel trash-panel"><div class="panel-header"><div><h2>Corbeille des commandes refus├®es</h2><p>Les commandes refus├®es sont conserv├®es 72 heures, puis supprim├®es automatiquement.</p></div>
+    <section class="panel table-panel trash-panel"><div class="panel-header"><div><h2>Corbeille des commandes refusées</h2><p>Les commandes refusées sont conservées 72 heures, puis supprimées automatiquement.</p></div>
       ${refused.length ? '<button class="secondary-button danger-outline" type="button" data-action="empty-trash">Vider la corbeille</button>' : ''}</div>
-    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Command├®e le</th><th>Client</th><th>Quartier</th><th>Qt├®</th><th>Total</th><th>Refus├®e le</th><th>Purge dans</th><th>Actions</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
-      : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refus├®es appara├«tront ici avant leur suppression d├®finitive.</p></div>'}</section>`;
+    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th><th>Actions</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
+      : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refusées apparaîtront ici avant leur suppression définitive.</p></div>'}</section>`;
 }
 
 function setAuthError(message) {
@@ -2374,18 +2427,18 @@ function authBusy(busy) {
   button.disabled = busy;
   if (spinner) spinner.hidden = !busy;
   if (label) label.textContent = busy
-    ? (authMode === 'signup' ? 'Cr├®ation du compteÔÇª' : 'ConnexionÔÇª')
-    : (authMode === 'signup' ? 'Cr├®er mon compte' : 'Se connecter');
+    ? (authMode === 'signup' ? 'Création du compte…' : 'Connexion…')
+    : (authMode === 'signup' ? 'Créer mon compte' : 'Se connecter');
 }
 
 function friendlyAuthError(error) {
   const message = String(error?.message || error || '');
-  if (/invalid login credentials/i.test(message)) return 'Email/t├®l├®phone ou mot de passe incorrect.';
-  if (/user already registered|already been registered/i.test(message)) return 'Ce compte existe d├®j├á. Utilisez lÔÇÖonglet Connexion.';
-  if (/email not confirmed/i.test(message)) return 'Cet email doit encore ├¬tre confirm├®.';
-  if (/password should be at least/i.test(message)) return 'Le mot de passe doit contenir au moins 6 caract├¿res.';
-  if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis r├®essayez.';
-  if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. V├®rifiez votre r├®seau.';
+  if (/invalid login credentials/i.test(message)) return 'Email/téléphone ou mot de passe incorrect.';
+  if (/user already registered|already been registered/i.test(message)) return 'Ce compte existe déjà. Utilisez l’onglet Connexion.';
+  if (/email not confirmed/i.test(message)) return 'Cet email doit encore être confirmé.';
+  if (/password should be at least/i.test(message)) return 'Le mot de passe doit contenir au moins 6 caractères.';
+  if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis réessayez.';
+  if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. Vérifiez votre réseau.';
   return message || 'Connexion impossible pour le moment.';
 }
 
@@ -2401,8 +2454,8 @@ function setAuthMode(mode) {
   if (password) password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   const hint = $('#auth-hint');
   if (hint) hint.textContent = authMode === 'signup'
-    ? 'Votre historique sera synchronis├® sur tous vos appareils d├¿s la cr├®ation du compte.'
-    : 'Retrouvez vos bandes, ventes et charges sur ordinateur comme sur t├®l├®phone.';
+    ? 'Votre historique sera synchronisé sur tous vos appareils dès la création du compte.'
+    : 'Retrouvez vos bandes, ventes et charges sur ordinateur comme sur téléphone.';
   setAuthError('');
   authBusy(false);
 }
@@ -2430,7 +2483,7 @@ function updateAccountUI() {
   if (name) name.textContent = userLabel();
   if (email) {
     const address = session?.user?.email || '';
-    email.textContent = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : (address || 'Non connect├®');
+    email.textContent = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : (address || 'Non connecté');
   }
   if (avatar) avatar.textContent = userInitials();
 }
@@ -2446,38 +2499,38 @@ async function openAccountDialog() {
       <h3>${esc(userLabel())}</h3>
       <p>${esc(identifier)}</p>
       <div class="metrics-grid" style="margin:12px 0">
-        ${metricCard('Bandes', number(snapshot.bands.length), 'Synchronis├®es', 'bands')}
-        ${metricCard('Relev├®s', number(snapshot.logs.length), 'Suivi quotidien', 'daily')}
-        ${metricCard('Ventes', number(snapshot.sales.length), 'Toutes p├®riodes', 'sales')}
-        ${metricCard('Charges', number(snapshot.charges.length), 'Toutes p├®riodes', 'expenses')}
+        ${metricCard('Bandes', number(snapshot.bands.length), 'Synchronisées', 'bands')}
+        ${metricCard('Relevés', number(snapshot.logs.length), 'Suivi quotidien', 'daily')}
+        ${metricCard('Ventes', number(snapshot.sales.length), 'Toutes périodes', 'sales')}
+        ${metricCard('Charges', number(snapshot.charges.length), 'Toutes périodes', 'expenses')}
       </div>
       <div class="field full">
-        <label for="account-whatsapp">Num├®ro WhatsApp du gestionnaire</label>
+        <label for="account-whatsapp">Numéro WhatsApp du gestionnaire</label>
         <input id="account-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" value="${esc(formatWhatsAppNumber(whatsapp))}" placeholder="+223 78 31 48 18" aria-describedby="account-whatsapp-hint" />
-        <small class="field-hint" id="account-whatsapp-hint">Chaque nouvelle commande publique envoie une alerte ├á ce num├®ro.</small>
+        <small class="field-hint" id="account-whatsapp-hint">Chaque nouvelle commande publique envoie une alerte à ce numéro.</small>
       </div>
       <div class="dialog-actions" style="justify-content:space-between">
-        <button class="secondary-button danger-outline" type="button" data-action="logout">Se d├®connecter</button>
+        <button class="secondary-button danger-outline" type="button" data-action="logout">Se déconnecter</button>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
-          <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le num├®ro</button>
+          <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le numéro</button>
           <button class="secondary-button" type="button" data-action="change-password">Changer le mot de passe</button>
-          <button class="secondary-button" type="button" data-action="restore-app">Restaurer lÔÇÖapplication</button>
+          <button class="secondary-button" type="button" data-action="restore-app">Restaurer l’application</button>
           <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
         </div>
       </div>
     </div>`;
-  setDialog('Mon compte', 'Synchronisation multi-appareils s├®curis├®e.', body);
+  setDialog('Mon compte', 'Synchronisation multi-appareils sécurisée.', body);
 }
 
 async function openChangePasswordDialog() {
   if (!session) return;
-  setDialog('Changer le mot de passe', 'Choisissez un nouveau mot de passe dÔÇÖau moins 6 caract├¿res.', `
+  setDialog('Changer le mot de passe', 'Choisissez un nouveau mot de passe d’au moins 6 caractères.', `
     <form class="dialog-form" id="password-form"><div class="form-grid">
       <div class="field full"><label for="new-password">Nouveau mot de passe *</label>
-        <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="6" required placeholder="6 caract├¿res minimum" /></div>
+        <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="6" required placeholder="6 caractères minimum" /></div>
       <div class="field full"><label for="confirm-password">Confirmer le mot de passe *</label>
-        <input id="confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="6" required placeholder="R├®p├®tez le mot de passe" /></div>
+        <input id="confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="6" required placeholder="Répétez le mot de passe" /></div>
     </div><div class="dialog-actions">
       <button class="secondary-button" type="button" data-close-dialog>Annuler</button>
       <button class="primary-button" type="submit">Enregistrer</button>
@@ -2486,7 +2539,7 @@ async function openChangePasswordDialog() {
     event.preventDefault();
     const password = $('#new-password')?.value || '';
     const confirm = $('#confirm-password')?.value || '';
-    if (password.length < 6) { toast('Le mot de passe doit contenir au moins 6 caract├¿res.', true); return; }
+    if (password.length < 6) { toast('Le mot de passe doit contenir au moins 6 caractères.', true); return; }
     if (password !== confirm) { toast('Les deux mots de passe ne correspondent pas.', true); return; }
     const button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
@@ -2497,7 +2550,7 @@ async function openChangePasswordDialog() {
         body: { password },
       });
       closeDialog();
-      toast('Mot de passe modifi├® avec succ├¿s.');
+      toast('Mot de passe modifié avec succès.');
     } catch (error) {
       toast(error?.message || 'Impossible de modifier le mot de passe.', true);
     } finally {
@@ -2507,7 +2560,7 @@ async function openChangePasswordDialog() {
 }
 
 async function restoreApp() {
-  if (!confirm('Restaurer lÔÇÖapplication et recharger tout le travail ?\\n\\nLe cache local sera vid├® et les donn├®es resynchronis├®es avec votre compte.')) return;
+  if (!confirm('Restaurer l’application et recharger tout le travail ?\\n\\nLe cache local sera vidé et les données resynchronisées avec votre compte.')) return;
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -2517,7 +2570,7 @@ async function restoreApp() {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.unregister()));
     }
-    toast('Application restaur├®e. RechargementÔÇª');
+    toast('Application restaurée. Rechargement…');
     window.setTimeout(() => location.reload(), 900);
   } catch (error) {
     toast(error?.message || 'Restauration impossible.', true);
@@ -2531,15 +2584,15 @@ async function saveAccountWhatsApp(button) {
     const digits = normalizeWhatsAppNumber(input?.value || '');
     if (button) button.disabled = true;
     const saved = await upsertProfile(session.user.user_metadata?.display_name || '', digits);
-    if (!saved) throw new Error('Enregistrement du profil impossible. V├®rifiez votre connexion.');
+    if (!saved) throw new Error('Enregistrement du profil impossible. Vérifiez votre connexion.');
     const published = await publishManagerWhatsApp(digits);
     closeDialog();
     await openAccountDialog();
     toast(published
-      ? 'Num├®ro WhatsApp enregistr├® et publi├® pour les commandes.'
-      : 'Num├®ro enregistr├®. Publication publique impossible pour le moment.', !published);
+      ? 'Numéro WhatsApp enregistré et publié pour les commandes.'
+      : 'Numéro enregistré. Publication publique impossible pour le moment.', !published);
   } catch (error) {
-    toast(error.message || 'Num├®ro WhatsApp invalide.', true);
+    toast(error.message || 'Numéro WhatsApp invalide.', true);
   } finally {
     if (button) button.disabled = false;
   }
@@ -2547,18 +2600,18 @@ async function saveAccountWhatsApp(button) {
 
 async function syncNow() {
   if (!session) return;
-  toast('Synchronisation en coursÔÇª');
+  toast('Synchronisation en cours…');
   await loadRemoteData();
   await render();
-  toast('Donn├®es synchronis├®es.');
+  toast('Données synchronisées.');
 }
 
 async function logout() {
-  if (!confirm('Se d├®connecter de ce compte ?\n\nLes donn├®es restent enregistr├®es et seront retrouv├®es ├á la prochaine connexion.')) return;
+  if (!confirm('Se déconnecter de ce compte ?\n\nLes données restent enregistrées et seront retrouvées à la prochaine connexion.')) return;
   await signOut();
   if ($('#app-dialog').open) closeDialog();
   showAuthScreen();
-  toast('Vous ├¬tes d├®connect├®.');
+  toast('Vous êtes déconnecté.');
 }
 
 function bindAuthUI() {
@@ -2569,13 +2622,13 @@ function bindAuthUI() {
   });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (!supabaseReady()) { setAuthError('Supabase nÔÇÖest pas configur├®.'); return; }
+    if (!supabaseReady()) { setAuthError('Supabase n’est pas configuré.'); return; }
     const identifier = $('#auth-identifier')?.value.trim() || '';
     const password = $('#auth-password')?.value || '';
     const whatsapp = $('#auth-whatsapp')?.value.trim() || '';
     setAuthError('');
-    if (!identifier) { setAuthError('Entrez votre email ou votre num├®ro de t├®l├®phone.'); return; }
-    if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caract├¿res.'); return; }
+    if (!identifier) { setAuthError('Entrez votre email ou votre numéro de téléphone.'); return; }
+    if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
     if (authMode === 'signup') {
       try { normalizeWhatsAppNumber(whatsapp); } catch (error) { setAuthError(error.message); return; }
     }
@@ -2586,7 +2639,7 @@ function bindAuthUI() {
       const passwordInput = $('#auth-password');
       if (passwordInput) passwordInput.value = '';
       await startApp();
-      toast(authMode === 'signup' ? 'Compte cr├®├® ┬À synchronisation activ├®e.' : 'Connexion r├®ussie.');
+      toast(authMode === 'signup' ? 'Compte créé · synchronisation activée.' : 'Connexion réussie.');
     } catch (error) {
       setAuthError(friendlyAuthError(error));
     } finally {
@@ -2611,11 +2664,11 @@ async function startApp() {
   try {
     await loadRemoteData();
     const migrated = await migrateLocalData();
-    if (migrated) toast('Vos donn├®es locales ont ├®t├® transf├®r├®es sur votre compte.');
+    if (migrated) toast('Vos données locales ont été transférées sur votre compte.');
     if (!remoteSettings.organization_id) await writeMeta('organization_id', uid());
   } catch (error) {
     console.error(error);
-    toast(`Synchronisation impossible : ${error.message || 'v├®rifiez votre r├®seau.'}`, true);
+    toast(`Synchronisation impossible : ${error.message || 'vérifiez votre réseau.'}`, true);
   }
   const initialPage = PAGE_LABELS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
   if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
@@ -2640,9 +2693,9 @@ async function handleAction(action, button = null) {
   else if (action === 'delete-band') { if (button?.dataset?.bandId) await deleteBandPermanently(button.dataset.bandId); }
   else if (action === 'delete-band-history') {
     const id = button?.dataset?.bandId;
-    if (id && confirm('Supprimer tout lÔÇÖhistorique (relev├®s) de cette bande ?')) {
+    if (id && confirm('Supprimer tout l’historique (relevés) de cette bande ?')) {
       await deleteLogsForBand(id);
-      toast('Historique supprim├®.');
+      toast('Historique supprimé.');
       await render();
     }
   }
@@ -2704,7 +2757,7 @@ function handleTabKeydown(event) {
   else return;
   event.preventDefault();
   setPage(tabs[nextIndex].dataset.page, { pushHistory: true, focusTab: true, scrollToTop: true })
-    .catch((error) => toast(error.message || 'Impossible dÔÇÖouvrir cette section.', true));
+    .catch((error) => toast(error.message || 'Impossible d’ouvrir cette section.', true));
 }
 
 const IOS_INSTALL_KEY = 'volaille-ios-install-dismissed-v1';
@@ -2724,12 +2777,12 @@ function setupIosInstallGuide() {
   const banner = $('#ios-install');
   if (!banner || !isIosDevice() || isStandaloneMode()) return;
   let dismissed = false;
-  try { dismissed = localStorage.getItem(IOS_INSTALL_KEY) === '1'; } catch (error) { /* stockage purg├® */ }
+  try { dismissed = localStorage.getItem(IOS_INSTALL_KEY) === '1'; } catch (error) { /* stockage purgé */ }
   if (dismissed) return;
   banner.hidden = false;
   banner.querySelector('[data-dismiss-ios-install]')?.addEventListener('click', () => {
     banner.hidden = true;
-    try { localStorage.setItem(IOS_INSTALL_KEY, '1'); } catch (error) { /* stockage purg├® */ }
+    try { localStorage.setItem(IOS_INSTALL_KEY, '1'); } catch (error) { /* stockage purgé */ }
   });
 }
 
@@ -2737,7 +2790,7 @@ async function requestPersistentStorage() {
   try {
     if (navigator.storage?.persist) await navigator.storage.persist();
   } catch (error) {
-    console.warn('Stockage persistant non accord├®', error);
+    console.warn('Stockage persistant non accordé', error);
   }
 }
 
@@ -2746,7 +2799,7 @@ async function main() {
   try {
     db = await openDatabase();
   } catch (error) {
-    console.warn('Stockage local indisponible (migration ignor├®e).', error);
+    console.warn('Stockage local indisponible (migration ignorée).', error);
     db = null;
   }
   await preloadLogo();
@@ -2768,7 +2821,7 @@ async function main() {
       if (target.checked) {
         openSellingModal().catch((error) => {
           target.checked = false;
-          toast(error?.message || 'Impossible dÔÇÖactiver la mise en vente.', true);
+          toast(error?.message || 'Impossible d’activer la mise en vente.', true);
         });
       } else {
         stopSelling();
@@ -2776,7 +2829,7 @@ async function main() {
     }
   });
   $('#dialog-content').addEventListener('submit', (event) => {
-    handleSubmit(event).catch((error) => toast(error.message || '├ëchec de lÔÇÖenregistrement.', true));
+    handleSubmit(event).catch((error) => toast(error.message || 'Échec de l’enregistrement.', true));
   });
   $('#app-dialog').addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
@@ -2798,7 +2851,7 @@ async function main() {
   window.addEventListener('popstate', navigateFromHistory);
   window.addEventListener('hashchange', navigateFromHistory);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js').catch((error) => console.error('Service worker non enregistr├® :', error));
+    navigator.serviceWorker.register('./sw.js').catch((error) => console.error('Service worker non enregistré :', error));
   }
   bindAuthUI();
   updateAccountUI();
@@ -2815,5 +2868,5 @@ main().catch((error) => {
   document.body.classList.remove('is-authenticated');
   const screen = $('#auth-screen');
   if (screen) screen.hidden = false;
-  setAuthError('Impossible de d├®marrer lÔÇÖapplication. V├®rifiez votre connexion puis rechargez la page.');
+  setAuthError('Impossible de démarrer l’application. Vérifiez votre connexion puis rechargez la page.');
 });

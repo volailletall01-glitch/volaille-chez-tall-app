@@ -123,11 +123,51 @@
     }
   }
 
-  function renderStock() {
+  function sellingConfig() {
     const stock = state.stock;
-    const heads = stock ? Math.max(0, Number(stock.stock_heads) || 0) : 0;
-    const min = stock && Number(stock.min_price) ? Number(stock.min_price) : MIN_PRICE;
-    const max = stock && Number(stock.max_price) ? Number(stock.max_price) : MAX_PRICE;
+    const heads = stock ? Math.max(0, Math.floor(Number(stock.stock_heads) || 0)) : 0;
+    const rawMin = stock && Number(stock.min_price) ? Number(stock.min_price) : MIN_PRICE;
+    const rawMax = stock && Number(stock.max_price) ? Number(stock.max_price) : MAX_PRICE;
+    const min = Math.min(rawMin, rawMax);
+    const max = Math.max(rawMin, rawMax);
+    return { stock, heads, min, max, fixed: min === max };
+  }
+
+  function applyPriceMode({ fixed, min, max }) {
+    const input = $('#order-price');
+    const label = $('#price-label');
+    const fixedNode = $('#order-fixed-price');
+    const hint = $('#price-hint');
+    const intro = $('#form-intro');
+    if (fixed) {
+      input.value = String(min);
+      input.hidden = true;
+      input.required = false;
+      fixedNode.hidden = false;
+      fixedNode.textContent = money(min);
+      label.textContent = 'Prix unitaire (fixé par l’éleveur)';
+      hint.textContent = 'Ce prix est fixe : il n’est pas modifiable.';
+      intro.textContent = 'Tous les champs sont obligatoires. Le prix unitaire est fixé par l’éleveur.';
+    } else {
+      input.hidden = false;
+      input.required = true;
+      input.min = String(min);
+      input.max = String(max);
+      input.placeholder = `Entre ${amount(min)} et ${amount(max)}`;
+      const current = Number(input.value);
+      if (!current || current < min || current > max) input.value = '';
+      fixedNode.hidden = true;
+      label.textContent = 'Prix par tête proposé (FCFA) *';
+      hint.textContent = `Choisissez votre prix entre ${amount(min)} FCFA et ${amount(max)} FCFA.`;
+      intro.textContent = 'Tous les champs sont obligatoires. Le prix proposé doit rester dans la fourchette affichée.';
+    }
+  }
+
+  function renderStock() {
+    const { stock, heads, min, max, fixed } = sellingConfig();
+    const priceText = fixed
+      ? `Prix unitaire : ${money(min)}`
+      : `Choisissez votre prix entre ${money(min)} et ${money(max)}`;
 
     if (!configured) {
       $('#stock-state').textContent = 'Indisponible';
@@ -145,19 +185,9 @@
       return;
     }
 
-    if (state.thanks) {
-      $('#price-range').textContent = `Prix par tête : entre ${amount(min)} F et ${amount(max)} F`;
-      $('#stock-value').textContent = `${amount(heads)} poulet${heads > 1 ? 's' : ''}`;
-      $('#stock-state').textContent = heads > 0 ? 'Disponible' : 'Épuisé';
-      $('#stock-state').className = `status-pill ${heads > 0 ? '' : 'warning'}`;
-      $('#stock-note').textContent = heads > 0
-        ? `Quantité totale de poulets disponibles aujourd’hui : ${amount(heads)}.`
-        : 'Désolé, le stock est actuellement épuisé.';
-      return;
-    }
-
-    $('#price-range').textContent = `Prix par tête : entre ${amount(min)} F et ${amount(max)} F`;
-    $('#stock-value').textContent = heads > 0 ? `${amount(heads)} poulet${heads > 1 ? 's' : ''}` : '0 poulet';
+    $('#price-range').textContent = priceText;
+    $('#price-range').dataset.mode = fixed ? 'fixed' : 'range';
+    $('#stock-value').textContent = `${amount(heads)} poulet${heads > 1 ? 's' : ''}`;
     $('#stock-state').textContent = heads > 0 ? 'Disponible' : 'Épuisé';
     $('#stock-state').className = `status-pill ${heads > 0 ? '' : 'warning'}`;
     $('#stock-note').textContent = heads > 0
@@ -167,10 +197,16 @@
       ? `Mis à jour le ${new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(stock.updated_at))}`
       : '';
 
-    const priceInput = $('#order-price');
-    priceInput.min = String(min);
-    priceInput.max = String(max);
-    priceInput.placeholder = `Entre ${amount(min)} et ${amount(max)}`;
+    applyPriceMode({ fixed, min, max });
+
+    const quantity = $('#order-quantity');
+    quantity.max = String(Math.max(1, heads));
+    quantity.placeholder = heads > 0 ? `1 à ${amount(heads)}` : 'Nombre de poulets';
+    $('#quantity-hint').textContent = heads > 0
+      ? `${amount(heads)} poulet${heads > 1 ? 's' : ''} disponible${heads > 1 ? 's' : ''} · maximum ${amount(heads)} par commande.`
+      : '';
+
+    if (state.thanks) { updateTotal(); return; }
 
     if (heads > 0) {
       setCardVisibility({ form: true, soldout: false, unavailable: false });
@@ -178,6 +214,7 @@
       setCardVisibility({ form: false, soldout: true, unavailable: false });
       $('#soldout-message').textContent = 'Désolé, le stock est actuellement épuisé.';
     }
+    updateTotal();
   }
 
   async function loadStock({ silent = false } = {}) {
@@ -207,17 +244,38 @@
     $('#order-total').textContent = money(quantity * price);
   }
 
+  function clampQuantity() {
+    const { heads } = sellingConfig();
+    const input = $('#order-quantity');
+    const value = Math.round(Number(input.value) || 0);
+    if (!value) return;
+    if (value < 1) input.value = '1';
+    else if (heads > 0 && value > heads) input.value = String(heads);
+    updateTotal();
+  }
+
+  function clampPrice() {
+    const { min, max, fixed } = sellingConfig();
+    if (fixed) return;
+    const input = $('#order-price');
+    const value = Math.round(Number(input.value) || 0);
+    if (!value) return;
+    if (value < min) input.value = String(min);
+    else if (value > max) input.value = String(max);
+    updateTotal();
+  }
+
   function validate(values) {
-    const min = state.stock && Number(state.stock.min_price) ? Number(state.stock.min_price) : MIN_PRICE;
-    const max = state.stock && Number(state.stock.max_price) ? Number(state.stock.max_price) : MAX_PRICE;
-    const heads = state.stock ? Math.max(0, Number(state.stock.stock_heads) || 0) : 0;
+    const { min, max, heads } = sellingConfig();
     if (!values.client_name || values.client_name.trim().length < 2) return 'Indiquez votre nom et prénom.';
     if (!values.client_phone || values.client_phone.replace(/\D/g, '').length < 6) return 'Indiquez un numéro de téléphone valide.';
     if (!values.neighborhood || values.neighborhood.trim().length < 2) return 'Indiquez votre quartier de livraison.';
     if (!Number.isInteger(values.quantity) || values.quantity < 1) return 'Indiquez une quantité entière supérieure à zéro.';
-    if (heads > 0 && values.quantity > heads) return `Il ne reste que ${amount(heads)} poulet${heads > 1 ? 's' : ''} disponibles.`;
+    if (heads > 0 && values.quantity > heads) return `Il ne reste que ${amount(heads)} poulet${heads > 1 ? 's' : ''} disponible${heads > 1 ? 's' : ''}.`;
     if (!Number.isFinite(values.price_per_head) || values.price_per_head < min || values.price_per_head > max) {
-      return `Le prix par tête doit être compris entre ${amount(min)} FCFA et ${amount(max)} FCFA.`;
+      return min === max
+        ? `Le prix unitaire est fixé à ${amount(min)} FCFA.`
+        : `Le prix par tête doit être compris entre ${amount(min)} FCFA et ${amount(max)} FCFA.`;
     }
     return '';
   }
@@ -270,6 +328,19 @@
     submit.textContent = 'Envoi en cours…';
     setHint('');
     try {
+      // Vérifie le stock et le prix en temps réel avant d'enregistrer la commande.
+      try {
+        const fresh = await request('/rest/v1/app_config?id=eq.1&select=*');
+        if (Array.isArray(fresh) && fresh.length) state.stock = fresh[0];
+      } catch {
+        /* on garde la dernière configuration connue */
+      }
+      const freshProblem = validate(values);
+      if (freshProblem) {
+        renderStock();
+        setHint(freshProblem, true);
+        return;
+      }
       const rows = await request('/rest/v1/orders', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
@@ -347,6 +418,10 @@
     }
     $('#order-form').addEventListener('submit', submitOrder);
     ['#order-quantity', '#order-price'].forEach((selector) => $(selector).addEventListener('input', updateTotal));
+    $('#order-quantity').addEventListener('blur', clampQuantity);
+    $('#order-price').addEventListener('blur', clampPrice);
+    $('#order-price').addEventListener('change', clampPrice);
+    $('#order-quantity').addEventListener('change', clampQuantity);
     $('#thanks-again').addEventListener('click', () => {
       state.thanks = false;
       $('#thanks-card').hidden = true;

@@ -56,7 +56,7 @@
 
         <article class="order-card" id="form-card">
           <h2>Votre commande</h2>
-          <p class="order-card-intro">Tous les champs sont obligatoires. Le prix proposé doit rester dans la fourchette affichée.</p>
+          <p class="order-card-intro" id="form-intro">Tous les champs sont obligatoires. Le prix proposé doit rester dans la fourchette affichée.</p>
           <form id="order-form" novalidate>
             <div class="order-fields">
               <div class="field">
@@ -74,10 +74,13 @@
               <div class="field">
                 <label for="order-quantity">Quantité souhaitée *</label>
                 <input id="order-quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" required placeholder="Nombre de poulets" />
+                <small class="field-hint" id="quantity-hint"></small>
               </div>
               <div class="field">
-                <label for="order-price">Prix par tête proposé (FCFA) *</label>
+                <label for="order-price" id="price-label">Prix par tête proposé (FCFA) *</label>
                 <input id="order-price" name="price_per_head" type="number" inputmode="numeric" min="2500" max="25000" step="50" required placeholder="Entre 2 500 et 25 000" />
+                <p class="order-fixed-price" id="order-fixed-price" hidden></p>
+                <small class="field-hint" id="price-hint"></small>
               </div>
               <div class="cost-preview full">
                 <span>Montant estimé de votre commande</span>

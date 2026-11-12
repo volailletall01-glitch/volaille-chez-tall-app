@@ -265,6 +265,9 @@ tbody tr:hover { background: #fcfdfc; }
 .orders-table-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .orders-table-actions .primary-button,
 .orders-table-actions .secondary-button { min-height: 32px; padding: 0 10px; font-size: 9px; }
+.orders-selling-note { margin: -4px 0 14px; padding: 10px 13px; border: 1px solid #dbe9df; border-radius: 9px; background: #f4faf6; color: #4a5750; font-size: 10px; line-height: 1.55; }
+.orders-selling-note strong { color: var(--green-800); font-weight: 800; }
+.orders-selling-note a { color: var(--green-800); font-weight: 700; }
 
 /* ---------- Page publique de commande ---------- */
 .order-body {
@@ -303,6 +306,7 @@ tbody tr:hover { background: #fcfdfc; }
 }
 .order-card h2 { margin: 0 0 6px; font: 800 18px 'Manrope', sans-serif; letter-spacing: -.4px; }
 .order-card-intro { margin: 0 0 18px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.order-fixed-price { margin: 0; padding: 13px 14px; border: 1px solid #cfe6d8; border-radius: 10px; background: var(--green-50); color: var(--green-800); font: 800 17px 'Manrope', sans-serif; letter-spacing: -.2px; }
 .order-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .order-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
 .order-submit { min-height: 44px; padding: 0 22px; font-size: 12px; }
@@ -347,13 +351,49 @@ tbody tr:hover { background: #fcfdfc; }
 }
 
 @media (max-width: 760px) {
-  .order-grid { grid-template-columns: 1fr; }
-  .order-stock { position: static; }
-  .order-fields { grid-template-columns: 1fr; }
+  .order-body { background: linear-gradient(180deg, #eef6f0 0, #F7F5EE 320px); }
+  .order-topbar { padding: 14px 16px 4px; }
+  .order-brand .brand-copy strong { font-size: 15px; }
+  .order-brand .brand-copy small { font-size: 10px; }
+  .order-main { padding: 6px 16px 40px; }
+  .order-hero { margin-bottom: 18px; }
+  .order-eyebrow { font-size: 10px; letter-spacing: 1.2px; }
+  .order-hero h1 { font-size: 24px; line-height: 1.22; letter-spacing: -.4px; margin-bottom: 8px; }
+  .order-intro { font-size: 14px; line-height: 1.55; }
+  .order-grid { grid-template-columns: 1fr; gap: 14px; }
+  .order-stock { position: static; padding: 18px; border-radius: 16px; }
+  .order-stock-head { font-size: 12px; }
+  .order-stock-value { margin: 12px 0 4px; font-size: 34px; }
+  .order-stock-note { font-size: 13px; line-height: 1.5; }
+  .order-price-range { font-size: 14px; line-height: 1.45; }
+  .order-updated { font-size: 11px; }
+  .order-card { padding: 18px 16px; border-radius: 16px; }
+  .order-card h2 { font-size: 20px; }
+  .order-card-intro { margin-bottom: 16px; font-size: 13px; line-height: 1.55; }
+  .order-fields { grid-template-columns: 1fr; gap: 14px; }
   .order-fields .full { grid-column: auto; }
-  .order-topbar { padding: 14px 15px; }
-  .order-main { padding: 8px 15px 34px; }
-  .order-footer { flex-direction: column; padding: 12px 15px 30px; }
+  .order-fields .field label { font-size: 12px; }
+  .order-fields .field input,
+  .order-fields .field select { min-height: 50px; padding: 0 14px; border-radius: 10px; font-size: 16px; }
+  .order-fields .field-hint { font-size: 11.5px; line-height: 1.45; }
+  .order-fixed-price { font-size: 18px; }
+  .order-fields .cost-preview { padding: 14px 16px; border-radius: 12px; }
+  .order-fields .cost-preview span { font-size: 12px; }
+  .order-fields .cost-preview strong { font-size: 22px; }
+  .order-hint { font-size: 12.5px; line-height: 1.5; }
+  .order-actions { margin-top: 16px; }
+  .order-submit { width: 100%; min-height: 52px; font-size: 15px; border-radius: 12px; }
+  .order-thanks h2, .order-soldout h2, .order-unavailable h2 { font-size: 21px; }
+  .order-thanks p, .order-soldout p, .order-unavailable p { font-size: 13.5px; line-height: 1.55; }
+  .order-thanks-recap { font-size: 12.5px; }
+  .order-track { padding: 22px 18px; gap: 10px; border-radius: 16px; }
+  .order-track-title { font-size: 24px; }
+  .order-track-text { font-size: 14px; }
+  .order-track-recap { font-size: 12px; }
+  .order-footer { flex-direction: column; gap: 4px; padding: 14px 16px 30px; font-size: 11px; text-align: center; }
+  .order-body .ios-install { left: 12px; right: 12px; bottom: 14px; }
+  .order-body .ios-install-copy strong { font-size: 12px; }
+  .order-body .ios-install-copy p { font-size: 11px; line-height: 1.45; }
 }
 
 
