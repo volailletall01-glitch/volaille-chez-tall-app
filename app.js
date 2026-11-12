@@ -29,6 +29,7 @@ const ICONS = {
   plus: '<path d="M12 4.4v15.2M4.4 12h15.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   lock: '<rect x="4.4" y="10" width="15.2" height="11.6" rx="3" fill="currentColor" opacity=".55"/><path d="M7.6 10V7.8a4.4 4.4 0 0 1 8.8 0V10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15.6" r="1.6" fill="currentColor"/>',
   check: '<circle cx="12" cy="12" r="9.4" fill="currentColor" opacity=".45"/><path d="m7.4 12.4 3 3 6.2-6.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
+  person: '<circle cx="12" cy="7.8" r="4.3" fill="currentColor"/><path d="M12 13.7c-4.6 0-7.9 3-7.9 7.3h15.8c0-4.3-3.3-7.3-7.9-7.3Z" fill="currentColor" opacity=".45"/><circle cx="10.5" cy="6.5" r="1.5" fill="#fff" opacity=".55"/>',
 };
 const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', orders: 'Mes Commandes', expenses: 'Charges', annual: 'Statistiques annuelles' };
 const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', archivee: 'Archivée' };
@@ -58,6 +59,19 @@ const currency = (amount) => `${new Intl.NumberFormat('fr-FR', { maximumFraction
 const number = (amount, digits = 0) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(Number(amount) || 0);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const dateLabel = (value) => value ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
+const GENDER_LABELS = { M: 'Homme', F: 'Femme' };
+const normalizeGender = (value) => {
+  const key = String(value || '').trim().toUpperCase();
+  return key === 'M' || key === 'F' ? key : '';
+};
+// Nom du client précédé de l'icône « tête de personne » et suivi de son sexe (M/F).
+function clientIdentity(name, gender = '', { phone = '', fallback = 'Client' } = {}) {
+  const key = normalizeGender(gender);
+  const badge = key
+    ? `<span class="gender-pill ${key === 'F' ? 'female' : 'male'}" title="${GENDER_LABELS[key]}">${key}</span>`
+    : '';
+  return `<span class="client-identity"><span class="client-identity-icon" aria-hidden="true">${icon('person')}</span><span class="client-identity-copy"><span class="client-identity-name">${esc(name || fallback)}${badge}</span>${phone ? `<span class="secondary-cell">${esc(phone)}</span>` : ''}</span></span>`;
+}
 const daysSince = (date) => Math.max(0, Math.floor((new Date(`${today()}T12:00:00`) - new Date(`${date}T12:00:00`)) / 86400000));
 const sum = (items, getter) => items.reduce((total, item) => total + (Number(getter(item)) || 0), 0);
 const isArchived = (band) => Boolean(band && band.archived_at);
@@ -1065,7 +1079,7 @@ function renderSales(snapshot) {
     const band = snapshot.bands.find((item) => item.id === sale.batch_id);
     const due = Number(sale.total_amount) - Number(sale.paid_amount);
     return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="Sélectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
-      <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td>
+      <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${clientIdentity(sale.client_name, '', { fallback: 'Vente comptoir' })}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td>
       <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Reçu</button>
       <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">${icon('trash')}</button></td></tr>`;
   }).join('');
@@ -1408,7 +1422,8 @@ function buildReceiptPdf(sale, band, options = {}) {
   const weight = Number(sale.total_weight_kg) || 0;
   const priceKg = Number(sale.price_per_kg) || 0;
   const payment = PAYMENT_LABELS[sale.payment_method] || 'Espèces';
-  const client = sale.client_name || 'Vente comptoir';
+  const gender = normalizeGender(sale.client_gender);
+  const client = `${sale.client_name || 'Vente comptoir'}${gender ? ` (${gender})` : ''}`;
   const receiptNo = String(sale.id || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase() || '—';
   const title = options.title || 'TICKET DE CAISSE';
   const note = options.note || 'Merci de votre confiance !';
@@ -2187,6 +2202,7 @@ function makeOrderReceipt(order, records) {
     id: order.id,
     client_name: order.client_name,
     client_phone: order.client_phone,
+    client_gender: normalizeGender(order.client_gender),
     client_address: order.neighborhood,
     sale_date: today(),
     heads,
@@ -2204,14 +2220,21 @@ function makeOrderReceipt(order, records) {
 
 function openTransactionDialog({
   title, subtitle, clientName, clientPhone, status, items, total, paid, remaining,
-  neighborhood = '', extra = '', receipt, receiptBand = null, receiptOptions = {},
+  neighborhood = '', extra = '', receipt, receiptBand = null, receiptOptions = {}, clientGender = '',
 }) {
   const message = buildTransactionMessage({ status, clientName, items, total, paid, remaining, neighborhood, extra });
   const lines = items.map((item) => `<div class="transaction-line"><span>${esc(item.label)} × ${number(item.quantity)}</span><span>${currency(item.total)}</span></div>`).join('');
+  const gender = normalizeGender(clientGender);
+  const genderBadge = gender
+    ? `<span class="gender-pill ${gender === 'F' ? 'female' : 'male'}" title="${GENDER_LABELS[gender]}">${gender}</span>`
+    : '';
   setDialog(title, subtitle, `
     <div class="dialog-form">
       <div class="transaction-summary">
-        <strong>${esc(clientName)}${clientPhone ? ` · ${esc(clientPhone)}` : ''}</strong>
+        <div class="transaction-client">
+          <span class="transaction-client-icon" aria-hidden="true">${icon('person')}</span>
+          <strong>${esc(clientName)}${genderBadge}${clientPhone ? ` · ${esc(clientPhone)}` : ''}</strong>
+        </div>
         ${lines}
         <div class="transaction-line"><span>Total payé</span><span>${currency(paid)}</span></div>
         <div class="transaction-line"><span>Solde restant</span><span>${currency(remaining)}</span></div>
@@ -2247,6 +2270,7 @@ function openAcceptedOrderDialog(order, records, band = null) {
       : 'Envoyez la confirmation au client ou téléchargez son reçu.',
     clientName: order.client_name,
     clientPhone: order.client_phone,
+    clientGender: order.client_gender,
     status: 'Commande acceptée ✅',
     items: [{
       label: bandName ? `Poulets de chair — ${bandName}` : 'Poulets de chair',
@@ -2271,6 +2295,7 @@ function openRefusedOrderDialog(order) {
     id: order.id,
     client_name: order.client_name,
     client_phone: order.client_phone,
+    client_gender: normalizeGender(order.client_gender),
     client_address: order.neighborhood,
     sale_date: String(order.created_at || '').slice(0, 10) || today(),
     heads: Number(order.quantity) || 0,
@@ -2289,6 +2314,7 @@ function openRefusedOrderDialog(order) {
     subtitle: 'Prévenez le client et remettez-lui un justificatif.',
     clientName: order.client_name,
     clientPhone: order.client_phone,
+    clientGender: order.client_gender,
     status: 'Commande refusée',
     items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
     total,
@@ -2584,7 +2610,7 @@ async function renderOrders(snapshot) {
         : '—';
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
-      <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
+      <td class="primary-cell">${clientIdentity(order.client_name, order.client_gender, { phone: order.client_phone })}</td>
       <td>${order.band_name ? esc(order.band_name) : '—'}</td>
       <td>${esc(order.neighborhood)}</td>
       <td>${number(order.quantity)}</td>
@@ -2598,7 +2624,7 @@ async function renderOrders(snapshot) {
     const total = (Number(order.quantity) || 0) * (Number(order.price_per_head) || 0);
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
-      <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
+      <td class="primary-cell">${clientIdentity(order.client_name, order.client_gender, { phone: order.client_phone })}</td>
       <td>${order.band_name ? esc(order.band_name) : '—'}</td>
       <td>${esc(order.neighborhood)}</td>
       <td>${number(order.quantity)}</td>
@@ -2834,7 +2860,7 @@ function renderSearchResults(query, snapshot, orders) {
   const sales = (snapshot.sales || []).filter((sale) => searchMatch(raw, sale.client_name, sale.client_phone, sale.client_address, sale.payment_method));
   if (sales.length) {
     groups.push(`<div class="search-group"><h4>Ventes et clients <span>${number(sales.length)}</span></h4>${sales.slice(0, 6).map((sale) => searchResultButton({
-      page: 'sales', iconName: 'sales',
+      page: 'sales', iconName: 'person',
       title: sale.client_name || 'Vente comptoir',
       subtitle: `${dateLabel(sale.sale_date)} · ${number(sale.heads)} sujets · ${currency(sale.total_amount)}`,
     })).join('')}</div>`);
@@ -2854,11 +2880,14 @@ function renderSearchResults(query, snapshot, orders) {
       .filter((order) => searchMatch(raw, order.client_name, order.client_phone, order.band_name, order.neighborhood))
     : [];
   if (orderList.length) {
-    groups.push(`<div class="search-group"><h4>Commandes <span>${number(orderList.length)}</span></h4>${orderList.slice(0, 6).map((order) => searchResultButton({
-      page: 'orders', iconName: 'orders',
-      title: order.client_name,
-      subtitle: `${ORDER_STATUS_LABELS[order.status] || order.status} · ${number(order.quantity)} sujets · ${order.band_name || 'Bande non définie'}`,
-    })).join('')}</div>`);
+    groups.push(`<div class="search-group"><h4>Commandes <span>${number(orderList.length)}</span></h4>${orderList.slice(0, 6).map((order) => {
+      const gender = normalizeGender(order.client_gender);
+      return searchResultButton({
+        page: 'orders', iconName: 'person',
+        title: `${order.client_name}${gender ? ` (${gender})` : ''}`,
+        subtitle: `${gender ? `${GENDER_LABELS[gender]} · ` : ''}${ORDER_STATUS_LABELS[order.status] || order.status} · ${number(order.quantity)} sujets · ${order.band_name || 'Bande non définie'}`,
+      });
+    }).join('')}</div>`);
   }
   if (!groups.length) {
     return `<div class="search-hint"><strong>Aucun résultat pour « ${esc(raw)} »</strong><p>Essayez un autre nom, un numéro de téléphone ou une date.</p></div>`;

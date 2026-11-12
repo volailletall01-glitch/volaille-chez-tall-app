@@ -78,7 +78,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - Si le stock mis en vente atteint 0 (ou si le gérant désactive la vente), le formulaire disparaît et affiche « Désolé, le stock est actuellement épuisé. »
 - **Prix fixe** : si le gérant définit un prix unique (ou prix min = prix max), le client voit uniquement « Prix unitaire : 3 500 FCFA », en lecture seule, sans champ de saisie.
 - **Intervalle de prix** : si prix min < prix max, le client voit « Choisissez votre prix entre 2 500 FCFA et 4 500 FCFA » ; la saisie est strictement bornée à cet intervalle (les valeurs hors bornes sont ramenées automatiquement).
-- Le client saisit nom et prénom, téléphone, quartier, quantité et (si intervalle) son prix par tête. **Le total (quantité × prix unitaire) se recalcule instantanément** à chaque changement. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
+- Le client indique s’il est un **homme (M)** ou une **femme (F)**, puis saisit nom et prénom, téléphone, quartier, quantité et (si intervalle) son prix par tête. Le sexe est enregistré avec la commande et affiché dans l’application, avec une **icône tête de personne**, devant le nom du client. **Le total (quantité × prix unitaire) se recalcule instantanément** à chaque changement. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
 - **Alerte gestionnaire** : dès l’envoi, la page publique propose (et tente d’ouvrir automatiquement) un message WhatsApp prérempli vers le numéro du gestionnaire, avec le nom, le téléphone, le quartier, la bande, la quantité, le prix et le total estimé.
 - En bas de la page, un grand bandeau suit la commande : « Commande en traitement — veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande ». Dès que le gérant valide, il devient un message de confirmation et de remerciement (et un message d’excuse si la commande est refusée). Le suivi reste visible si le client revient plus tard sur le même appareil.
 - Côté gérant : liste des demandes avec une colonne **Bande**, les détails du client, bouton **Valider** (la commande bascule automatiquement dans les ventes sur la bande concernée, la quantité est déduite du stock de l’élevage **et** du stock mis en vente) et bouton **Refuser** (la commande part dans la **Corbeille**, sans impact sur le stock).
@@ -125,6 +125,7 @@ POULET/
 ├── supabase/pwa-selling-band.sql # Bande vendue (app_config + commandes)
 ├── supabase/pwa-account.sql   # Fonction de suppression définitive du compte
 ├── supabase/pwa-orders-reset.sql # Statut « archivee » (remise à zéro du compteur)
+├── supabase/pwa-order-gender.sql # Sexe du client (M/F) dans les commandes
 ├── app.js                     # Interface, auth, synchronisation, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA

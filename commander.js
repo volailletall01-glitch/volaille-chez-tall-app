@@ -6,6 +6,8 @@
   const REFRESH_MS = 20000;
   const ORDER_KEY = 'poulet-suivi-commande';
   const state = { stock: null, busy: false, timer: null, thanks: false, order: null };
+  const GENDER_LABELS = { M: 'Homme', F: 'Femme' };
+  const genderLabel = (value) => GENDER_LABELS[String(value || '').toUpperCase()] || '';
 
   const money = (value) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value) || 0)} FCFA`;
   const amount = (value) => `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Number(value) || 0)}`;
@@ -73,6 +75,7 @@
 
   function recapLine(order) {
     const parts = [];
+    if (order.client_name) parts.push(`${order.client_name}${order.client_gender ? ` (${order.client_gender})` : ''}`);
     if (order.band_name) parts.push(`bande ${order.band_name}`);
     if (order.quantity) parts.push(`${amount(order.quantity)} poulet${Number(order.quantity) > 1 ? 's' : ''}`);
     if (order.price_per_head) parts.push(`${money(order.price_per_head)} par tête`);
@@ -280,9 +283,17 @@
     updateTotal();
   }
 
+  function syncGenderChoice() {
+    document.querySelectorAll('.gender-option').forEach((label) => {
+      const input = label.querySelector('input[name="client_gender"]');
+      label.classList.toggle('is-selected', Boolean(input && input.checked));
+    });
+  }
+
   function validate(values) {
     const { min, max, heads } = sellingConfig();
     if (!values.client_name || values.client_name.trim().length < 2) return 'Indiquez votre nom et prénom.';
+    if (!GENDER_LABELS[values.client_gender]) return 'Indiquez si vous êtes un homme ou une femme.';
     if (!values.client_phone || values.client_phone.replace(/\D/g, '').length < 6) return 'Indiquez un numéro de téléphone valide.';
     if (!values.neighborhood || values.neighborhood.trim().length < 2) return 'Indiquez votre quartier de livraison.';
     if (!Number.isInteger(values.quantity) || values.quantity < 1) return 'Indiquez une quantité entière supérieure à zéro.';
@@ -308,6 +319,7 @@
     const message = [
       'Bonjour, nouvelle commande Volaille chez TALL :',
       `Client : ${values.client_name}`,
+      values.client_gender ? `Sexe : ${genderLabel(values.client_gender)} (${values.client_gender})` : null,
       `Téléphone : ${values.client_phone}`,
       `Quartier : ${values.neighborhood}`,
       `Quantité : ${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''}`,
@@ -330,6 +342,7 @@
     const form = $('#order-form');
     const values = {
       client_name: form.client_name.value.trim(),
+      client_gender: String(form.client_gender?.value || '').toUpperCase(),
       client_phone: form.client_phone.value.trim(),
       neighborhood: form.neighborhood.value.trim(),
       quantity: Math.round(Number(form.quantity.value) || 0),
@@ -369,9 +382,10 @@
       const total = values.quantity * values.price_per_head;
       form.reset();
       updateTotal();
+      syncGenderChoice();
       $('#thanks-title').textContent = `Merci infiniment, ${values.client_name.split(' ')[0]} !`;
       $('#thanks-message').textContent = 'Votre commande a bien été reçue. Nous vous contactons très vite pour confirmer la livraison.';
-      $('#thanks-recap').textContent = `${values.band_name ? `Bande ${values.band_name} · ` : ''}${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''} · ${money(values.price_per_head)} par tête · total estimé ${money(total)} · livraison à ${values.neighborhood} · ${values.client_phone}`;
+      $('#thanks-recap').textContent = `${values.client_name} (${values.client_gender}) · ${values.band_name ? `bande ${values.band_name} · ` : ''}${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''} · ${money(values.price_per_head)} par tête · total estimé ${money(total)} · livraison à ${values.neighborhood} · ${values.client_phone}`;
       state.thanks = true;
       state.order = {
         ...values,
@@ -436,6 +450,10 @@
       return;
     }
     $('#order-form').addEventListener('submit', submitOrder);
+    document.querySelectorAll('input[name="client_gender"]').forEach((input) => {
+      input.addEventListener('change', syncGenderChoice);
+    });
+    syncGenderChoice();
     ['#order-quantity', '#order-price'].forEach((selector) => $(selector).addEventListener('input', updateTotal));
     $('#order-quantity').addEventListener('blur', clampQuantity);
     $('#order-price').addEventListener('blur', clampPrice);

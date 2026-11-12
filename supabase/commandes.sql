@@ -27,6 +27,7 @@ create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   client_name text not null check (char_length(client_name) between 2 and 120),
+  client_gender text check (client_gender in ('M', 'F')),
   client_phone text not null check (char_length(client_phone) between 6 and 30),
   neighborhood text not null check (char_length(neighborhood) between 2 and 120),
   quantity integer not null check (quantity > 0 and quantity <= 5000),
@@ -52,6 +53,13 @@ alter table public.app_config add constraint app_config_max_price_check
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
   check (status in ('en_attente', 'validee', 'refusee', 'archivee'));
+
+-- Migration : sexe du client (M = homme, F = femme) saisi dans le formulaire
+-- public de commande. Facultatif pour les anciennes commandes.
+alter table public.orders add column if not exists client_gender text;
+alter table public.orders drop constraint if exists orders_client_gender_check;
+alter table public.orders add constraint orders_client_gender_check
+  check (client_gender in ('M', 'F'));
 
 alter table public.orders enable row level security;
 alter table public.app_config enable row level security;
@@ -97,7 +105,7 @@ create policy "config_update_app" on public.app_config
 
 -- Droits
 revoke all on public.orders from anon;
-grant insert (client_name, client_phone, neighborhood, quantity, price_per_head)
+grant insert (client_name, client_phone, client_gender, neighborhood, quantity, price_per_head)
   on public.orders to anon;
 -- Si la migration pwa-selling-band.sql a déjà été exécutée, conserver l'accès
 -- aux colonnes de bande lors d'une ré-exécution de ce script.

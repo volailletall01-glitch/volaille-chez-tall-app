@@ -60,6 +60,22 @@
           <p class="order-card-intro" id="form-intro">Tous les champs sont obligatoires. Le prix proposé doit rester dans la fourchette affichée.</p>
           <form id="order-form" novalidate>
             <div class="order-fields">
+              <div class="field full">
+                <span class="field-label" id="gender-label">Vous êtes *</span>
+                <div class="gender-choice" role="radiogroup" aria-labelledby="gender-label">
+                  <label class="gender-option" data-gender="M">
+                    <input type="radio" name="client_gender" value="M" required />
+                    <span class="gender-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.8" r="4.3" fill="currentColor"/><path d="M12 13.7c-4.6 0-7.9 3-7.9 7.3h15.8c0-4.3-3.3-7.3-7.9-7.3Z" fill="currentColor" opacity=".45"/></svg></span>
+                    <span class="gender-option-text"><strong>Homme</strong><small>(M)</small></span>
+                  </label>
+                  <label class="gender-option" data-gender="F">
+                    <input type="radio" name="client_gender" value="F" required />
+                    <span class="gender-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.8" r="4.3" fill="currentColor"/><path d="M12 13.7c-4.6 0-7.9 3-7.9 7.3h15.8c0-4.3-3.3-7.3-7.9-7.3Z" fill="currentColor" opacity=".45"/></svg></span>
+                    <span class="gender-option-text"><strong>Femme</strong><small>(F)</small></span>
+                  </label>
+                </div>
+                <small class="field-hint">Cette information nous aide à vous identifier lors de la livraison.</small>
+              </div>
               <div class="field">
                 <label for="order-name">Nom et prénom *</label>
                 <input id="order-name" name="client_name" autocomplete="name" maxlength="120" required placeholder="Ex. Awa Diop" />
