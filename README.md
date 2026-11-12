@@ -85,6 +85,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - **Mise en vente (Espace Gérant)** : un interrupteur « Mise en vente » permet d’activer ou de désactiver la vente publique. À l’activation, une fenêtre demande la **bande à vendre** (parmi les bandes actives avec sujets disponibles), le nombre de têtes destinées à la vente et le prix par tête, en prix fixe ou en intervalle (min–max), dans la fourchette 2 500 – 25 000 FCFA. Le plafond de têtes suit le stock de la bande choisie. Un rappel affiche en permanence l’état de la mise en vente (têtes en ligne, prix, bande) avec les liens **Partager le lien** et **Modifier**. La désactivation remet le stock affiché à 0 ; la bande et les prix configurés sont conservés.
 - **Après la création de la mise en vente**, une fenêtre propose de partager le lien public : copie du lien ou envoi WhatsApp. L’onglet ne comporte plus de boutons « Copier le lien public », « Ouvrir la page » ni « Synchroniser avec l’élevage ». Les ventes et relevés quotidiens ne modifient jamais la mise en vente.
 - **Corbeille** : les commandes refusées y restent 72 heures (compte à rebours affiché), puis sont purgées automatiquement. Un bouton **Restaurer** remet une commande refusée en attente (elle redevient traitable et le bandeau du client repasse à « Commande en traitement ») ; un autre bouton permet de vider la corbeille immédiatement.
+- **Remise à zéro du compteur « Validées »** : la carte du compteur affiche un bouton **Remettre à zéro**. Après confirmation, toutes les commandes validées passent au statut **Archivée** et le compteur revient à 0. Rien n’est supprimé : les commandes restent consultables, les ventes générées (`sales.order_id`) et leurs reçus PDF sont conservés, et le chiffre d’affaires reste inchangé.
 - Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 
 ### Charges
@@ -123,6 +124,7 @@ POULET/
 ├── supabase/pwa-whatsapp.sql  # Colonnes WhatsApp (profil + numéro publié)
 ├── supabase/pwa-selling-band.sql # Bande vendue (app_config + commandes)
 ├── supabase/pwa-account.sql   # Fonction de suppression définitive du compte
+├── supabase/pwa-orders-reset.sql # Statut « archivee » (remise à zéro du compteur)
 ├── app.js                     # Interface, auth, synchronisation, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
@@ -136,7 +138,7 @@ POULET/
 - Bandes, relevés, ventes, charges, profil et paramètres sont stockés dans **Supabase**, rattachés au compte (`user_id`). Les règles **RLS** empêchent tout autre utilisateur d’y accéder. Le dernier snapshot synchronisé est conservé dans IndexedDB, séparément pour chaque compte, pour permettre la consultation hors ligne.
 - La première connexion sur un appareil qui possède encore d’anciennes données locales (IndexedDB) les transfère une seule fois vers le compte, si celui-ci est vide. L’IndexedDB n’est plus utilisée ensuite.
 - Hors ligne, l’application peut afficher le dernier snapshot synchronisé si IndexedDB est disponible. La création, la modification et la synchronisation des données nécessitent toujours une connexion Internet; les changements hors ligne ne sont pas mis en file.
-- **Commandes clients** : les commandes et le stock publié restent dans des tables publiques Supabase, afin que le lien de commande fonctionne sans compte. La clé `supabase-config.js` est publique et limitée par RLS : création de commande, lecture des commandes reçues, validation/refus, corbeille et publication du stock.
+- **Commandes clients** : les commandes et le stock publié restent dans des tables publiques Supabase, afin que le lien de commande fonctionne sans compte. La clé `supabase-config.js` est publique et limitée par RLS : création de commande, lecture des commandes reçues, validation/refus, archivage des commandes validées, corbeille et publication du stock.
 - **Numéro WhatsApp** : `profiles.whatsapp` conserve le numéro du compte. Il est aussi publié dans `app_config.manager_whatsapp` (lisible par la page publique) pour construire l’alerte de nouvelle commande.
 
 ## Mise en place de Supabase (une seule fois)
@@ -146,11 +148,12 @@ POULET/
 3. Exécuter `supabase/pwa-whatsapp.sql` (colonnes `profiles.whatsapp` et `app_config.manager_whatsapp`).
 4. Exécuter `supabase/pwa-selling-band.sql` (colonnes `band_id` / `band_name` sur `app_config` et `orders`).
 5. Exécuter `supabase/pwa-account.sql` (fonction `delete_own_account()` pour la suppression du compte depuis **Mon compte**).
-6. Dans **Authentication → Sign In / Providers → Email**, laisser **Confirm email** désactivé pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
-7. **Double authentification** : l’API TOTP de Supabase est active par défaut, aucune configuration email/SMTP n’est nécessaire. Au premier accès, chaque compte scanne le QR code affiché avec une application d’authentification. En cas de perte du téléphone, un administrateur peut supprimer le facteur TOTP depuis **Authentication → Users → (utilisateur) → Factors** dans Supabase.
-8. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-9. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
-10. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
+6. Exécuter `supabase/pwa-orders-reset.sql` (statut **Archivée** et policy de mise à jour, pour la remise à zéro du compteur **Validées**). `commandes.sql` inclut déjà cette migration pour une installation neuve.
+7. Dans **Authentication → Sign In / Providers → Email**, laisser **Confirm email** désactivé pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
+8. **Double authentification** : l’API TOTP de Supabase est active par défaut, aucune configuration email/SMTP n’est nécessaire. Au premier accès, chaque compte scanne le QR code affiché avec une application d’authentification. En cas de perte du téléphone, un administrateur peut supprimer le facteur TOTP depuis **Authentication → Users → (utilisateur) → Factors** dans Supabase.
+9. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+10. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
+11. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
 
 ## Installer
 

@@ -32,7 +32,7 @@ create table if not exists public.orders (
   quantity integer not null check (quantity > 0 and quantity <= 5000),
   price_per_head integer not null check (price_per_head between 2500 and 25000),
   status text not null default 'en_attente'
-    check (status in ('en_attente', 'validee', 'refusee')),
+    check (status in ('en_attente', 'validee', 'refusee', 'archivee')),
   handled_at timestamptz
 );
 
@@ -46,6 +46,12 @@ alter table public.app_config alter column max_price set default 25000;
 alter table public.app_config drop constraint if exists app_config_max_price_check;
 alter table public.app_config add constraint app_config_max_price_check
   check (max_price >= min_price);
+
+-- Migration : statut « archivee » utilisé par la remise à zéro du compteur
+-- « Validées » de l'onglet Mes Commandes (les ventes restent intactes).
+alter table public.orders drop constraint if exists orders_status_check;
+alter table public.orders add constraint orders_status_check
+  check (status in ('en_attente', 'validee', 'refusee', 'archivee'));
 
 alter table public.orders enable row level security;
 alter table public.app_config enable row level security;
@@ -68,7 +74,7 @@ drop policy if exists "orders_update_app" on public.orders;
 create policy "orders_update_app" on public.orders
   for update to anon, authenticated
   using (true)
-  with check (status in ('en_attente', 'validee', 'refusee'));
+  with check (status in ('en_attente', 'validee', 'refusee', 'archivee'));
 
 -- Corbeille : les commandes refusées sont supprimées après 72 h (ou manuellement).
 drop policy if exists "orders_delete_app" on public.orders;

@@ -1,26 +1,37 @@
 ﻿const DB_NAME = 'poulet-pro';
 const DB_VERSION = 1;
 const STORE_NAMES = ['bands', 'daily_logs', 'inventory_items', 'inventory_movements', 'sales', 'charges', 'clients', 'meta'];
+// Jeu d'icônes « duotone 3D » : formes pleines, seconde teinte et reflet,
+// pour un rendu plus lisible et plus relief que les anciens traits fins.
 const ICONS = {
-  dashboard: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
-  bands: '<path d="M4 20V8l8-5 8 5v12"/><path d="M9 20v-6h6v6M3 20h18"/>',
-  daily: '<path d="M8 3v4m8-4v4M4 9h16"/><rect x="4" y="5" width="16" height="16" rx="2"/><path d="m9 15 2 2 4-4"/>',
-  stock: '<path d="M3 7 12 3l9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>',
-  sales: '<path d="M3 6h2l2 11h11l3-8H6"/><circle cx="9" cy="21" r="1"/><circle cx="17" cy="21" r="1"/><path d="M10 10h6m-3-3v6"/>',
-  expenses: '<path d="M12 3v18m5-13a3 3 0 0 0-3-2h-4a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6h-4a3 3 0 0 1-3-2"/>',
-  clients: '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
-  stats: '<path d="M4 20V10m6 10V4m6 16v-7m6 7V7"/><path d="M3 20h18"/>',
-  sync: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2"/>',
-  settings: '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1.1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1.1l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1.1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1.1l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 2Z" transform="translate(-1 -1) scale(1.08)"/>',
-  bird: '<path d="M20 12c0 4-3 7-8 7H8l-3 2 1-4c-2-2-3-4-3-7 0-4 3-7 8-7s9 4 9 9Z"/><circle cx="15" cy="10" r="1"/>',
-  orders: '<path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1Z"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M8 12h8M8 16h5"/>',
-  feed: '<path d="m4 8 8-4 8 4-8 4-8-4Z"/><path d="M4 8v9l8 4 8-4V8M12 12v9"/>',
-  water: '<path d="M12 3s7 8 7 12a7 7 0 0 1-14 0c0-4 7-12 7-12Z"/><path d="M9 16a3 3 0 0 0 3 2"/>',
-  money: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M7 9h.01M17 15h.01"/>',
-  box: '<path d="m3 7 9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>',
+  dashboard: '<rect x="3" y="3" width="8" height="8" rx="2.4" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="2.4" fill="currentColor" opacity=".45"/><rect x="3" y="13" width="8" height="8" rx="2.4" fill="currentColor" opacity=".45"/><rect x="13" y="13" width="8" height="8" rx="2.4" fill="currentColor"/>',
+  bands: '<path d="M12 3.2 21.6 10l-1.3 1.8L12 5.6 3.7 11.8 2.4 10 12 3.2Z" fill="currentColor"/><path d="M5.2 10.6h13.6V20a1.4 1.4 0 0 1-1.4 1.4H6.6A1.4 1.4 0 0 1 5.2 20v-9.4Z" fill="currentColor" opacity=".45"/><path d="M9.4 21.4v-4.6a2.6 2.6 0 0 1 5.2 0v4.6H9.4Z" fill="currentColor"/>',
+  daily: '<rect x="3" y="5" width="18" height="16" rx="3.4" fill="currentColor" opacity=".45"/><path d="M6.4 11.4h11.2V8a3 3 0 0 0-3-3H6.6a3 3 0 0 0-3 3v.4c0 1.7 1.2 3 2.8 3Z" fill="currentColor"/><rect x="7" y="2.4" width="2.2" height="5.2" rx="1.1" fill="currentColor"/><rect x="14.8" y="2.4" width="2.2" height="5.2" rx="1.1" fill="currentColor"/><path d="m8.2 15.8 2.2 2.2 4.4-4.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  stock: '<path d="M3.2 7.6 12 3l8.8 4.6L12 12.2 3.2 7.6Z" fill="currentColor"/><path d="M3.2 9.5 11 13.6v7L3.2 16.6v-7.1Z" fill="currentColor" opacity=".45"/><path d="M20.8 9.5 13 13.6v7l7.8-4V9.5Z" fill="currentColor" opacity=".72"/>',
+  sales: '<path d="M2.2 3.4a1.2 1.2 0 0 1 0-2.4h2.6c.6 0 1.1.4 1.2 1l.4 1.7h12.3c.8 0 1.3.8 1.1 1.5l-2.4 6.3c-.2.5-.7.8-1.2.8H7.4l.3 1.3h9.3a1.2 1.2 0 0 1 0 2.4H6.9c-.6 0-1.1-.4-1.2-1L2.9 3.4H2.2Z" fill="currentColor"/><path d="M6.4 8.6h11.4l-1.7 4.4H7.7l-1.3-4.4Z" fill="#fff" opacity=".35"/><circle cx="7.2" cy="20.4" r="1.7" fill="currentColor"/><circle cx="17" cy="20.4" r="1.7" fill="currentColor"/>',
+  expenses: '<rect x="2.8" y="5.4" width="18.4" height="14.4" rx="3.2" fill="currentColor" opacity=".45"/><path d="M5.2 5.4V4.6a2 2 0 0 1 2-2h9.6v2.8H5.2Z" fill="currentColor"/><rect x="15" y="10.6" width="6.2" height="4.8" rx="2.4" fill="currentColor"/><circle cx="17.6" cy="13" r="1" fill="#fff" opacity=".85"/>',
+  clients: '<circle cx="9" cy="7.4" r="3.7" fill="currentColor"/><path d="M2.6 20.6c0-3.8 2.9-6.6 6.4-6.6s6.4 2.8 6.4 6.6H2.6Z" fill="currentColor" opacity=".45"/><circle cx="17.4" cy="8.2" r="2.9" fill="currentColor" opacity=".6"/><path d="M15.6 14.1c3.2 0 5.8 2.8 5.8 6.5h-4.2c.1-1.2-.2-2.4-.8-3.4-.5-.9-1.2-1.7-2-2.4.4-.4.8-.6 1.2-.7Z" fill="currentColor" opacity=".8"/>',
+  stats: '<rect x="3" y="12.4" width="4.4" height="8.6" rx="1.8" fill="currentColor" opacity=".45"/><rect x="9.8" y="7.8" width="4.4" height="13.2" rx="1.8" fill="currentColor" opacity=".7"/><rect x="16.6" y="3" width="4.4" height="18" rx="1.8" fill="currentColor"/>',
+  sync: '<path d="M20.4 6.2v5.4h-5.4M3.6 17.8v-5.4h5.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.4 8.6A7.4 7.4 0 0 1 18.2 6l2.2 2.6M3.6 15.4l2.2 2.6A7.4 7.4 0 0 0 18.6 15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  settings: '<path d="M12 2.4 14 4l2.6-.4 1.5 2 2.3 1.2-.2 2.6 1.6 2-1.6 2 .2 2.6-2.3 1.2-1.5 2-2.6-.4-2 1.6-2-1.6-2.6.4-1.5-2-2.3-1.2.2-2.6L2 12l1.6-2-.2-2.6L5.7 6.2 7.2 4.2 9.8 4.6 12 2.4Z" fill="currentColor" opacity=".45"/><circle cx="12" cy="12" r="3.6" fill="currentColor"/><circle cx="10.8" cy="10.8" r="1.1" fill="#fff" opacity=".7"/>',
+  bird: '<path d="M20.4 11.6c0 4.3-3.5 7.8-7.8 7.8H8.3l-3.9 2.6.8-4.4a7.7 7.7 0 0 1-1.7-4.8A7.7 7.7 0 0 1 11.2 5h1.4l2.5-2.4 1.1 3.4h.4a7.8 7.8 0 0 1 3.8 5.6Z" fill="currentColor"/><circle cx="14.4" cy="9.6" r="1" fill="#fff"/><path d="m17.4 10.9 2.6.6-2.4 1.4" fill="currentColor"/><path d="M10.4 19.2v2.4M13.8 19.2v2.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  orders: '<rect x="4" y="4.2" width="16" height="17.4" rx="3.4" fill="currentColor" opacity=".45"/><rect x="8.2" y="2.2" width="7.6" height="4.4" rx="2" fill="currentColor"/><path d="M8.2 11.2h7.6M8.2 15.2h5.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  feed: '<path d="M8.2 2.6h7.6l-.9 2.6c2.5 1.7 4 4.6 4 7.8V19a2.6 2.6 0 0 1-2.6 2.6H7.7A2.6 2.6 0 0 1 5.1 19v-6c0-3.2 1.5-6.1 4-7.8l-.9-2.6Z" fill="currentColor" opacity=".5"/><path d="M12 9.4v6.2m0-3.4-1.9-1.9m1.9 1.9 1.9-1.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
+  water: '<path d="M12 2.4s7.2 7.8 7.2 12.2a7.2 7.2 0 0 1-14.4 0C4.8 10.2 12 2.4 12 2.4Z" fill="currentColor"/><path d="M8.8 14.8a3.4 3.4 0 0 0 2.8 3.4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity=".75"/>',
+  money: '<rect x="2.4" y="5.6" width="19.2" height="12.8" rx="3" fill="currentColor" opacity=".45"/><circle cx="12" cy="12" r="3.4" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="#fff" opacity=".8"/><path d="M6 9.2h1.6M16.4 14.8H18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  box: '<path d="M3.2 7.6 12 3l8.8 4.6L12 12.2 3.2 7.6Z" fill="currentColor"/><path d="M3.2 9.5 11 13.6v7L3.2 16.6v-7.1Z" fill="currentColor" opacity=".45"/><path d="M20.8 9.5 13 13.6v7l7.8-4V9.5Z" fill="currentColor" opacity=".72"/>',
+  search: '<circle cx="10.6" cy="10.6" r="6.4" fill="currentColor" opacity=".35"/><circle cx="10.6" cy="10.6" r="6.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15.6 15.6 5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="8.8" cy="8.8" r="1.6" fill="#fff" opacity=".8"/>',
+  bell: '<path d="M12 2.6A6.5 6.5 0 0 0 5.5 9v3.4L3.6 16h16.8l-1.9-3.6V9A6.5 6.5 0 0 0 12 2.6Z" fill="currentColor" opacity=".55"/><path d="M9.4 18.4a2.8 2.8 0 0 0 5.2 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="4.6" r="1.2" fill="currentColor"/>',
+  edit: '<path d="M4 20h4.6L20 8.6a2.7 2.7 0 0 0-3.8-3.8L4.9 16.1 4 20Z" fill="currentColor" opacity=".6"/><path d="m15 5.6 3.8 3.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>',
+  trash: '<rect x="3.6" y="4.4" width="16.8" height="2.8" rx="1.4" fill="currentColor"/><path d="M5.6 8.2h12.8l-.9 11.4a2.6 2.6 0 0 1-2.6 2.4H9.1a2.6 2.6 0 0 1-2.6-2.4L5.6 8.2Z" fill="currentColor" opacity=".5"/><path d="M9.6 4.4V3.4a1.6 1.6 0 0 1 1.6-1.6h1.6a1.6 1.6 0 0 1 1.6 1.6v1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.2 11.4v6.4M13.8 11.4v6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".75"/>',
+  restore: '<path d="M4.4 9.8a7.8 7.8 0 1 1-.4 4.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M3.2 4.2v6.2h6.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
+  close: '<path d="M5.2 5.2 18.8 18.8M18.8 5.2 5.2 18.8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
+  plus: '<path d="M12 4.4v15.2M4.4 12h15.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
+  lock: '<rect x="4.4" y="10" width="15.2" height="11.6" rx="3" fill="currentColor" opacity=".55"/><path d="M7.6 10V7.8a4.4 4.4 0 0 1 8.8 0V10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15.6" r="1.6" fill="currentColor"/>',
+  check: '<circle cx="12" cy="12" r="9.4" fill="currentColor" opacity=".45"/><path d="m7.4 12.4 3 3 6.2-6.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
 };
 const PAGE_LABELS = { dashboard: 'Vue d’ensemble', bands: 'Bandes', daily: 'Suivi quotidien', sales: 'Ventes', orders: 'Mes Commandes', expenses: 'Charges', annual: 'Statistiques annuelles' };
-const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée' };
+const ORDER_STATUS_LABELS = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', archivee: 'Archivée' };
 const SUPABASE = window.SUPABASE_CONFIG || {};
 const ordersState = { orders: [], lastFetch: 0, error: null, publicStock: null, loading: false };
 const CATEGORY_LABELS = {
@@ -37,7 +48,7 @@ let currentPage = 'dashboard';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
 const uid = () => crypto.randomUUID();
 const today = () => {
   const date = new Date();
@@ -764,7 +775,7 @@ function setDialog(title, subtitle, body) {
   }
   $('#dialog-content').innerHTML = `
     <div class="dialog-head"><div><h2 id="dialog-title">${esc(title)}</h2><p>${esc(subtitle)}</p></div>
-      <button class="dialog-close" type="button" aria-label="Fermer" data-close-dialog>×</button></div>
+      <button class="dialog-close" type="button" aria-label="Fermer" data-close-dialog>${icon('close')}</button></div>
     ${body}`;
   dialog.showModal();
   const first = $('input, select, textarea, button', dialog);
@@ -805,9 +816,9 @@ function batchSelect(bands, selected = '') {
   ).join('')}`;
 }
 
-function metricCard(label, value, note, iconName, noteClass = '') {
+function metricCard(label, value, note, iconName, noteClass = '', extra = '') {
   return `<article class="metric-card"><div class="metric-top"><span>${label}</span><span class="metric-icon">${icon(iconName)}</span></div>
-    <div class="metric-value">${value}</div><div class="metric-note ${noteClass}">${note}</div></article>`;
+    <div class="metric-value">${value}</div><div class="metric-note ${noteClass}">${note}</div>${extra}</article>`;
 }
 
 function bandMortality(band, snapshot) {
@@ -826,12 +837,12 @@ async function renderDashboard(snapshot) {
   const unpaidTotal = sum((snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0), (s) => Number(s.total_amount) - Number(s.paid_amount));
   const unpaidCount = (snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0).length;
   const firstName = (userLabel() || '').split(/\s+/)[0] || 'Awa';
-  const heading = `<div class="page-heading dashboard-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le resume de votre exploitation avicole, bande par bande.</p></div></div>`;
+  const heading = `<div class="page-heading dashboard-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole, bande par bande.</p></div></div>`;
 
   if (!bands.length) {
     return `${heading}
-      ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivee${archivedCount > 1 ? 's' : ''} : plus aucune operation dans le quotidien, mais l'historique reste comptabilise dans les statistiques annuelles.</p>` : ''}
-      <section class="panel table-panel">${emptyState('Aucune bande active', 'Creez votre premier lot pour voir apparaitre ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Creer la premiere bande</button>')}</section>`;
+      ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : plus aucune opération dans le quotidien, mais l’historique reste comptabilisé dans les statistiques annuelles.</p>` : ''}
+      <section class="panel table-panel">${emptyState('Aucune bande active', 'Créez votre premier lot pour voir apparaître ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>`;
   }
 
   const cards = bands.map((band) => {
@@ -844,15 +855,15 @@ async function renderDashboard(snapshot) {
     const closed = band.status === 'closed';
     return `<article class="band-kpi">
       <header class="band-kpi-head">
-        <div><h3>${esc(band.name)}</h3><p>${esc(band.strain || 'Souche non precisee')} · J${daysSince(band.arrival_date)} / ${Number(band.target_age_days || 42)} j</p></div>
-        <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Cloturee' : 'En cours'}</span>
+        <div><h3>${esc(band.name)}</h3><p>${esc(band.strain || 'Souche non précisée')} · J${daysSince(band.arrival_date)} / ${Number(band.target_age_days || 42)} j</p></div>
+        <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Clôturée' : 'En cours'}</span>
       </header>
       <div class="band-kpi-grid">
         <div><span>Disponible</span><strong>${number(birds)}</strong></div>
-        <div><span>Mortalite cumulee</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
-        <div><span>Chiffre d'affaires</span><strong>${currency(revenue)}</strong></div>
-        <div><span>Depenses</span><strong>${currency(costs)}</strong></div>
-        <div class="wide"><span>Benefice</span><strong class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</strong></div>
+        <div><span>Mortalité cumulée</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
+        <div><span>Chiffre d’affaires</span><strong>${currency(revenue)}</strong></div>
+        <div><span>Dépenses</span><strong>${currency(costs)}</strong></div>
+        <div class="wide"><span>Bénéfice</span><strong class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</strong></div>
       </div>
     </article>`;
   }).join('');
@@ -866,7 +877,7 @@ async function renderDashboard(snapshot) {
         <div class="band-chart-track"><div class="band-chart-bar" style="width:${width.toFixed(1)}%"></div></div>
         <span class="band-chart-value">${currency(revenue)}</span></div>`;
       }).join('')
-    : '<p class="band-chart-empty">Aucune vente enregistree pour le moment : les barres apparaitront des la premiere vente.</p>';
+    : '<p class="band-chart-empty">Aucune vente enregistrée pour le moment : les barres apparaîtront dès la première vente.</p>';
 
   const mobileBands = bands.map((band) => ({ name: esc(band.name), expenses: currency(bandCost(band, snapshot)), profit: currency(bandRevenue(band, snapshot) - bandCost(band, snapshot)), stock: number(activeBirds(band, snapshot)) }));
   startMobileBandRotation(bands);
@@ -879,8 +890,8 @@ async function renderDashboard(snapshot) {
           <strong>Accueil</strong>
         </div>
         <div class="mobile-dash-icons">
-          <button class="mobile-icon-btn" type="button" data-action="search" aria-label="Rechercher dans l’application">&#128269;</button>
-          <button class="mobile-icon-btn" type="button" aria-label="Notifications">&#128276;</button>
+          <button class="mobile-icon-btn" type="button" data-action="search" aria-label="Rechercher dans l’application">${icon('search')}</button>
+          <button class="mobile-icon-btn" type="button" aria-label="Notifications">${icon('bell')}</button>
         </div>
       </header>
       <p class="mobile-salutation">Bonjour, ${esc(firstName)}</p>
@@ -890,45 +901,49 @@ async function renderDashboard(snapshot) {
       </div>
       <div class="mobile-kpi-grid">
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">DEPENSES &#171; <span class="mobile-kpi-band">NOM BANDE</span> &#187;</span>
+          <span class="mobile-kpi-icon">${icon('expenses')}</span>
+          <span class="mobile-kpi-label">Dépenses · <span class="mobile-kpi-band">nom de la bande</span></span>
           <strong class="mobile-kpi-value mobile-kpi-expenses">0 FCFA</strong>
         </div>
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">BENEFICES &#171; <span class="mobile-kpi-band">NOM BANDE</span> &#187;</span>
+          <span class="mobile-kpi-icon">${icon('money')}</span>
+          <span class="mobile-kpi-label">Bénéfices · <span class="mobile-kpi-band">nom de la bande</span></span>
           <strong class="mobile-kpi-value mobile-kpi-profit">0 FCFA</strong>
         </div>
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">A encaisser</span>
+          <span class="mobile-kpi-icon">${icon('clients')}</span>
+          <span class="mobile-kpi-label">À encaisser</span>
           <strong class="mobile-kpi-value">${currency(unpaidTotal)}</strong>
           <small>${number(unpaidCount)} en cours</small>
         </div>
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">COMMANDES EN ATTENTES</span>
+          <span class="mobile-kpi-icon">${icon('orders')}</span>
+          <span class="mobile-kpi-label">Commandes en attente</span>
           <strong class="mobile-kpi-value">${number(pendingOrders)}</strong>
         </div>
       </div>
       <div class="mobile-bands-row">
         <div class="mobile-band-card">
-          <span class="mobile-band-title">BANDE &#171; <span class="mobile-band-name">nom bande</span> &#187;</span>
-          <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
+          <span class="mobile-band-title">Bande · <span class="mobile-band-name">nom de la bande</span></span>
+          <span class="mobile-band-stock">Disponible : <strong class="mobile-band-stock-val">0</strong></span>
         </div>
         <div class="mobile-band-card">
-          <span class="mobile-band-title">BANDE &#171; <span class="mobile-band-name">Nom bande</span> &#187;</span>
-          <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
+          <span class="mobile-band-title">Bande · <span class="mobile-band-name">nom de la bande</span></span>
+          <span class="mobile-band-stock">Disponible : <strong class="mobile-band-stock-val">0</strong></span>
         </div>
         <div class="mobile-tools-col">
-          <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">&#128197;</span> SUIVI Quotidien</button>
-          <button class="mobile-tool-card" type="button" data-page="annual"><span class="mobile-tool-icon">&#128202;</span> Statistiques</button>
+          <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">${icon('daily')}</span> Suivi quotidien</button>
+          <button class="mobile-tool-card" type="button" data-page="annual"><span class="mobile-tool-icon">${icon('stats')}</span> Statistiques</button>
         </div>
       </div>
       <div class="mobile-sales-preview">
-        <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="mobile-link" type="button" data-page="sales">voir plus</button></div>
+        <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="mobile-link" type="button" data-page="sales">Voir plus</button></div>
       </div>
     </section>
     <section class="band-kpi-list" aria-label="Indicateurs par bande">${cards}</section>
-    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivee${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
     <section class="panel band-chart-panel">
-      <div class="panel-header"><div><h2>Chiffre d'affaires par bande</h2><p>Repartition des recettes enregistrees pour chaque lot.</p></div></div>
+      <div class="panel-header"><div><h2>Chiffre d’affaires par bande</h2><p>Répartition des recettes enregistrées pour chaque lot.</p></div></div>
       <div class="band-chart">${chart}</div>
     </section>`;
 }
@@ -954,8 +969,8 @@ function renderBands(snapshot) {
       <td>${number(birds)}</td><td>${number(percent, 1)} %</td><td>${weightText}</td><td>${currency(unitCost)}</td>
       <td>${currency(bandCost(band, snapshot))}</td><td><span class="status-pill ${band.status === 'closed' ? 'neutral' : ''}">${band.status === 'closed' ? 'Clôturée' : 'En cours'}</span></td>
       <td class="actions-cell">
-        <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">✎</button>
-        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique des relevés">↺</button>
+        <button class="icon-button" type="button" data-action="edit-band" data-band-id="${esc(band.id)}" title="Modifier">${icon('edit')}</button>
+        <button class="icon-button" type="button" data-action="delete-band-history" data-band-id="${esc(band.id)}" title="Supprimer l'historique des relevés">${icon('restore')}</button>
         <button class="secondary-button danger-outline" type="button" data-action="archive-band" data-band-id="${esc(band.id)}" title="Archiver la bande">Archiver</button>
       </td></tr>`;
   }).join('');
@@ -1024,7 +1039,7 @@ function renderDaily(snapshot) {
   const rows = [...logs].sort((a, b) => b.log_date.localeCompare(a.log_date)).map((log) => {
     const band = snapshot.bands.find((item) => item.id === log.batch_id);
     return `<tr><td>${dateLabel(log.log_date)}</td><td class="primary-cell">${esc(band?.name || 'Bande supprimée')}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>
-      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td></tr>`;
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">${icon('trash')}</button></td></tr>`;
   }).join('');
   return `<div class="page-heading"><div><h1>Suivi quotidien</h1><p>Consignez les mortalités et observations au poulailler.</p></div><button class="primary-button" data-action="new-daily"><span class="plus">+</span> Saisie du jour</button></div>
     <section class="panel table-panel"><div class="panel-header"><div><h2>Historique des relevés</h2><p>${logs.length} relevé${logs.length > 1 ? 's' : ''} · la suppression recalcule aussitôt les totaux.${archivedCount ? ` ${number(archivedCount)} relevé${archivedCount > 1 ? 's' : ''} de bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} conservé${archivedCount > 1 ? 's' : ''} dans les statistiques annuelles.` : ''}</p></div></div>
@@ -1042,7 +1057,7 @@ function renderSales(snapshot) {
     return `<tr><td class="check-cell"><input type="checkbox" data-sale-check="${esc(sale.id)}" aria-label="Sélectionner la vente de ${esc(sale.client_name || 'comptoir')}" /></td>
       <td>${dateLabel(sale.sale_date)}</td><td class="primary-cell">${esc(sale.client_name || 'Vente comptoir')}</td><td>${esc(band?.name || '—')}</td><td>${number(sale.heads)}</td><td>${number(sale.total_weight_kg, 1)} kg</td><td>${currency(sale.total_amount)}</td><td>${currency(due)}</td><td>${esc(PAYMENT_LABELS[sale.payment_method] || sale.payment_method)}</td><td><span class="status-pill ${due > 0 ? 'warning' : ''}">${due > 0 ? 'À encaisser' : 'Payée'}</span></td>
       <td class="sales-row-actions"><button class="primary-button" type="button" data-action="download-receipt" data-sale-id="${esc(sale.id)}" data-client-name="${esc(sale.client_name || 'Vente comptoir')}" data-client-phone="${esc(sale.client_phone || '')}" data-client-address="${esc(sale.client_address || '')}" data-band-name="${esc(band?.name || '—')}" data-sale-date="${esc(sale.sale_date)}" data-heads="${esc(sale.heads)}" data-total-weight="${esc(sale.total_weight_kg)}" data-price="${esc(sale.price_per_kg)}" data-price-head="${esc(sale.price_per_head || '')}" data-total="${esc(sale.total_amount)}" data-paid="${esc(sale.paid_amount)}" data-payment="${esc(sale.payment_method || '')}" data-created-at="${esc(sale.created_at || '')}">Reçu</button>
-      <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">✕</button></td></tr>`;
+      <button class="icon-button danger-button" type="button" data-action="delete-sale" data-sale-id="${esc(sale.id)}" title="Supprimer cette vente">${icon('trash')}</button></td></tr>`;
   }).join('');
   const revenue = sum(sales, (sale) => sale.total_amount);
   const unpaid = sum(sales, (sale) => Number(sale.total_amount) - Number(sale.paid_amount));
@@ -1181,6 +1196,29 @@ async function emptyTrash() {
   }
 }
 
+async function resetValidatedOrders(button) {
+  const validated = ordersState.orders.filter((order) => order.status === 'validee');
+  if (!validated.length) { toast('Le compteur des commandes validées est déjà à zéro.'); return; }
+  const count = validated.length;
+  if (!confirm(`Remettre le compteur « Validées » à zéro ?\n\n${count} commande${count > 1 ? 's' : ''} validée${count > 1 ? 's' : ''} ser${count > 1 ? 'ont' : 'a'} archivée${count > 1 ? 's' : ''}. Les ventes déjà enregistrées et leurs reçus sont conservés.`)) return;
+  if (button) button.disabled = true;
+  try {
+    await supabaseRequest('/rest/v1/orders?status=eq.validee', {
+      method: 'PATCH',
+      body: { status: 'archivee' },
+      headers: { Prefer: 'return=minimal' },
+    });
+    validated.forEach((order) => { order.status = 'archivee'; });
+    ordersState.lastFetch = 0;
+    toast(`Compteur remis à zéro : ${count} commande${count > 1 ? 's' : ''} archivée${count > 1 ? 's' : ''}.`);
+    await render();
+  } catch (error) {
+    toast(error.message || 'Remise à zéro impossible.', true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function renderExpenses(snapshot) {
   const activeIds = activeBandIds(snapshot);
   const bands = visibleBands(snapshot);
@@ -1189,7 +1227,7 @@ function renderExpenses(snapshot) {
   const rows = [...charges].sort((a, b) => b.charge_date.localeCompare(a.charge_date)).map((charge) => {
     const band = snapshot.bands.find((item) => item.id === charge.batch_id);
     return `<tr><td>${dateLabel(charge.charge_date)}</td><td class="primary-cell">${esc(charge.description)}</td><td>${esc(CATEGORY_LABELS[charge.category] || charge.category)}</td><td>${esc(band?.name || 'Exploitation')}</td><td>${currency(charge.amount)}</td>
-      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td></tr>`;
+      <td class="actions-cell"><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">${icon('trash')}</button></td></tr>`;
   }).join('');
   const total = sum(charges, (charge) => charge.amount);
   return `<div class="page-heading"><div><h1>Charges d’exploitation</h1><p>Centralisez les dépenses directes et communes de la ferme.</p></div><button class="primary-button" data-action="new-charge"><span class="plus">+</span> Ajouter une charge</button></div>
@@ -1615,11 +1653,11 @@ async function openBandDetail(bandId) {
       </div>
       ${archived ? '<p class="archive-note">Bande archivée : ses opérations n’apparaissent plus dans les menus du quotidien, mais son historique reste comptabilisé dans les statistiques annuelles.</p>' : ''}
       <h3>Relevés (${logs.length})</h3>
-      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
+      ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">${icon('trash')}</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
       <h3>Ventes (${sales.length})</h3>
       ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
       <h3>Charges (${charges.length})</h3>
-      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">✕</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
+      ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">${icon('trash')}</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
       <div class="dialog-actions">
         ${archived ? `<button class="secondary-button danger-outline" type="button" data-action="delete-band" data-band-id="${esc(band.id)}">Supprimer définitivement</button>` : ''}
         <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
@@ -2570,7 +2608,7 @@ async function renderOrders(snapshot) {
   return `${header(actions)}
     <section class="metrics-grid">
       ${metricCard('En attente', number(pending.length), 'À traiter', 'orders', pending.length ? 'low-stock' : '')}
-      ${metricCard('Validées', number(validated.length), '', 'bird', 'positive')}
+      ${metricCard('Validées', number(validated.length), validated.length ? `${validated.length} commande${validated.length > 1 ? 's' : ''} traitée${validated.length > 1 ? 's' : ''}` : 'Aucune commande validée', 'check', 'positive', validated.length ? '<button class="metric-action" type="button" data-action="reset-validated">Remettre à zéro</button>' : '')}
       ${metricCard('Corbeille', number(refused.length), 'Purge automatique après 72 h', 'expenses')}
       ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
@@ -2744,9 +2782,9 @@ function searchMatch(query, ...values) {
   return normalizeAscii(values.filter(Boolean).join(' ')).toLowerCase().includes(needle);
 }
 
-function searchResultButton({ page, bandId = '', emoji, title, subtitle }) {
+function searchResultButton({ page, bandId = '', iconName = 'search', title, subtitle }) {
   return `<button class="search-result" type="button" data-action="search-open" data-search-page="${esc(page)}"${bandId ? ` data-band-id="${esc(bandId)}"` : ''}>
-    <span class="search-result-icon" aria-hidden="true">${emoji}</span>
+    <span class="search-result-icon" aria-hidden="true">${icon(iconName)}</span>
     <span class="search-result-copy"><strong>${esc(title)}</strong><small>${esc(subtitle)}</small></span>
     <span class="search-result-arrow" aria-hidden="true">›</span>
   </button>`;
@@ -2761,7 +2799,7 @@ function renderSearchResults(query, snapshot, orders) {
   const bands = (snapshot.bands || []).filter((band) => searchMatch(raw, band.name, band.strain, band.supplier));
   if (bands.length) {
     groups.push(`<div class="search-group"><h4>Bandes <span>${number(bands.length)}</span></h4>${bands.slice(0, 6).map((band) => searchResultButton({
-      page: 'bands', bandId: band.id, emoji: '🐔',
+      page: 'bands', bandId: band.id, iconName: 'bands',
       title: band.name,
       subtitle: `${band.strain || 'Souche non précisée'} · ${number(activeBirds(band, snapshot))} sujets disponibles`,
     })).join('')}</div>`);
@@ -2769,7 +2807,7 @@ function renderSearchResults(query, snapshot, orders) {
   const sales = (snapshot.sales || []).filter((sale) => searchMatch(raw, sale.client_name, sale.client_phone, sale.client_address, sale.payment_method));
   if (sales.length) {
     groups.push(`<div class="search-group"><h4>Ventes et clients <span>${number(sales.length)}</span></h4>${sales.slice(0, 6).map((sale) => searchResultButton({
-      page: 'sales', emoji: '🧾',
+      page: 'sales', iconName: 'sales',
       title: sale.client_name || 'Vente comptoir',
       subtitle: `${dateLabel(sale.sale_date)} · ${number(sale.heads)} sujets · ${currency(sale.total_amount)}`,
     })).join('')}</div>`);
@@ -2777,7 +2815,7 @@ function renderSearchResults(query, snapshot, orders) {
   const charges = (snapshot.charges || []).filter((charge) => searchMatch(raw, charge.category, charge.description));
   if (charges.length) {
     groups.push(`<div class="search-group"><h4>Charges <span>${number(charges.length)}</span></h4>${charges.slice(0, 6).map((charge) => searchResultButton({
-      page: 'expenses', emoji: '💸',
+      page: 'expenses', iconName: 'expenses',
       title: charge.description || charge.category || 'Charge',
       subtitle: `${dateLabel(charge.charge_date)} · ${currency(charge.amount)}`,
     })).join('')}</div>`);
@@ -2787,7 +2825,7 @@ function renderSearchResults(query, snapshot, orders) {
     : [];
   if (orderList.length) {
     groups.push(`<div class="search-group"><h4>Commandes <span>${number(orderList.length)}</span></h4>${orderList.slice(0, 6).map((order) => searchResultButton({
-      page: 'orders', emoji: '📦',
+      page: 'orders', iconName: 'orders',
       title: order.client_name,
       subtitle: `${ORDER_STATUS_LABELS[order.status] || order.status} · ${number(order.quantity)} sujets · ${order.band_name || 'Bande non définie'}`,
     })).join('')}</div>`);
@@ -3195,6 +3233,7 @@ async function handleAction(action, button = null) {
   else if (action === 'share-order-link') openShareDialog();
   else if (action === 'copy-public-link') await copyPublicLink();
   else if (action === 'empty-trash') await emptyTrash();
+  else if (action === 'reset-validated') await resetValidatedOrders(button);
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
   else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }

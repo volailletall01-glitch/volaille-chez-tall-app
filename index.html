@@ -72,7 +72,7 @@
         </form>
         <form class="auth-form auth-totp-form" id="auth-totp-form" onsubmit="return false" hidden novalidate>
           <div class="auth-totp-head">
-            <span class="auth-totp-badge" aria-hidden="true">🔐</span>
+            <span class="auth-totp-badge" data-icon="lock" aria-hidden="true"></span>
             <div>
               <strong id="auth-totp-title">Double authentification</strong>
               <p id="auth-totp-text">Saisissez le code à 6 chiffres affiché par votre application d’authentification.</p>
@@ -138,7 +138,7 @@
           <div class="breadcrumb"><span>Exploitation</span><span class="breadcrumb-slash">/</span><strong id="page-title">Vue d’ensemble</strong></div>
           <div class="topbar-actions">
             <span class="today-label" id="today-label"></span>
-            <button class="icon-button topbar-search" type="button" data-action="search" title="Rechercher" aria-label="Rechercher dans l’application">&#128269;</button>
+            <button class="icon-button topbar-search" type="button" data-action="search" title="Rechercher" aria-label="Rechercher dans l’application"><span data-icon="search"></span></button>
           <button class="icon-button mobile-account" type="button" data-action="account" title="Mon compte" aria-label="Ouvrir mon compte"><span id="topbar-avatar">VT</span></button>
           </div>
         </header>
