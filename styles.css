@@ -651,7 +651,10 @@ body.is-authenticated .auth-screen { display: none; }
   .mobile-dashboard { display: block; }
   .band-kpi-list,
   .band-chart-panel,
-  .mobile-pending-orders { display: none; }
+  .mobile-pending-orders,
+  .dashboard-heading,
+  .mobile-quick-actions,
+  .mobile-sales-preview { display: none; }
   .mobile-dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .mobile-dash-brand { display: flex; align-items: center; gap: 8px; }
   .mobile-avatar { width: 34px; height: 34px; border-radius: 50%; background: #0D7A4D; color: #fff; display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; }
