@@ -34,8 +34,9 @@ Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en c
 - **Inscription** et **connexion** par email **ou** numéro de téléphone, avec mot de passe (6 caractères minimum).
 - À l’inscription, le **numéro WhatsApp du gestionnaire est obligatoire** (format international, ex. `+223 78 31 48 18`). Les numéros locaux maliens à 8 chiffres reçoivent automatiquement l’indicatif `223`.
 - Les données sont stockées sur le compte Supabase : à la reconnexion sur un autre appareil, l’historique complet est retrouvé automatiquement.
-- Bouton **Mon compte** (en bas de la barre latérale) : profil, nombre d’enregistrements, synchronisation manuelle, **modification du numéro WhatsApp du gestionnaire** et déconnexion.
+- Bouton **Mon compte** (barre latérale sur ordinateur, avatar du tableau de bord et du bandeau supérieur sur téléphone) : profil, nombre d’enregistrements, synchronisation manuelle, **modification du numéro WhatsApp du gestionnaire**, **changement du mot de passe**, **restauration de l’application** (vide le cache puis resynchronise), **déconnexion** et **suppression définitive du compte** (confirmation par saisie de « SUPPRIMER », effacement des données du compte et du cache local).
 - Un bouton **Se déconnecter** est également disponible directement dans la barre latérale.
+- Une **recherche globale** est accessible par la loupe (bandeau du tableau de bord sur téléphone, barre supérieure ailleurs) : elle retrouve instantanément les bandes, clients et ventes, charges et commandes, puis ouvre la section correspondante.
 - Le numéro WhatsApp est publié dans `app_config` afin que la page publique de commande puisse alerter le gestionnaire, même sans compte connecté.
 
 ### Vue d’ensemble
@@ -120,6 +121,7 @@ POULET/
 ├── supabase/auth-sync.sql     # Compte, bandes, relevés, ventes, charges (RLS)
 ├── supabase/pwa-whatsapp.sql  # Colonnes WhatsApp (profil + numéro publié)
 ├── supabase/pwa-selling-band.sql # Bande vendue (app_config + commandes)
+├── supabase/pwa-account.sql   # Fonction de suppression définitive du compte
 ├── app.js                     # Interface, auth, synchronisation, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
@@ -142,10 +144,11 @@ POULET/
 2. Exécuter `supabase/auth-sync.sql` dans le même éditeur (comptes, profils, bandes, relevés, ventes, charges, paramètres + RLS).
 3. Exécuter `supabase/pwa-whatsapp.sql` (colonnes `profiles.whatsapp` et `app_config.manager_whatsapp`).
 4. Exécuter `supabase/pwa-selling-band.sql` (colonnes `band_id` / `band_name` sur `app_config` et `orders`).
-5. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
-6. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-7. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
-8. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
+5. Exécuter `supabase/pwa-account.sql` (fonction `delete_own_account()` pour la suppression du compte depuis **Mon compte**).
+6. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
+7. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+8. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
+9. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
 
 ## Installer
 

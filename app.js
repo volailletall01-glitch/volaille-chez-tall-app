@@ -799,9 +799,12 @@ async function renderDashboard(snapshot) {
   return `${heading}
     <section class="mobile-dashboard" data-bands='${esc(JSON.stringify(mobileBands))}' aria-label="Tableau de bord mobile">
       <header class="mobile-dash-header">
-        <div class="mobile-dash-brand"><span class="mobile-avatar">AB</span><strong>Accueil</strong></div>
+        <div class="mobile-dash-brand">
+          <button class="mobile-avatar-button" type="button" data-action="account" aria-label="Ouvrir mon compte"><span class="mobile-avatar" id="mobile-profile-avatar">${esc(userInitials())}</span></button>
+          <strong>Accueil</strong>
+        </div>
         <div class="mobile-dash-icons">
-          <button class="mobile-icon-btn" type="button" aria-label="Rechercher">&#128269;</button>
+          <button class="mobile-icon-btn" type="button" data-action="search" aria-label="Rechercher dans l’application">&#128269;</button>
           <button class="mobile-icon-btn" type="button" aria-label="Notifications">&#128276;</button>
         </div>
       </header>
@@ -2492,7 +2495,7 @@ async function renderOrders(snapshot) {
   return `${header(actions)}
     <section class="metrics-grid">
       ${metricCard('En attente', number(pending.length), 'À traiter', 'orders', pending.length ? 'low-stock' : '')}
-      ${metricCard('Validées', number(validated.length), 'Basculées dans les ventes', 'bird', 'positive')}
+      ${metricCard('Validées', number(validated.length), '', 'bird', 'positive')}
       ${metricCard('Corbeille', number(refused.length), 'Purge automatique après 72 h', 'expenses')}
       ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
@@ -2581,6 +2584,93 @@ function updateAccountUI() {
     email.textContent = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : (address || 'Non connecté');
   }
   if (avatar) avatar.textContent = userInitials();
+  const mobileAvatar = $('#mobile-profile-avatar');
+  if (mobileAvatar) mobileAvatar.textContent = userInitials();
+  const topbarAvatar = $('#topbar-avatar');
+  if (topbarAvatar) topbarAvatar.textContent = userInitials();
+}
+
+function searchMatch(query, ...values) {
+  const needle = normalizeAscii(query).trim().toLowerCase();
+  if (!needle) return false;
+  return normalizeAscii(values.filter(Boolean).join(' ')).toLowerCase().includes(needle);
+}
+
+function searchResultButton({ page, bandId = '', emoji, title, subtitle }) {
+  return `<button class="search-result" type="button" data-action="search-open" data-search-page="${esc(page)}"${bandId ? ` data-band-id="${esc(bandId)}"` : ''}>
+    <span class="search-result-icon" aria-hidden="true">${emoji}</span>
+    <span class="search-result-copy"><strong>${esc(title)}</strong><small>${esc(subtitle)}</small></span>
+    <span class="search-result-arrow" aria-hidden="true">›</span>
+  </button>`;
+}
+
+function renderSearchResults(query, snapshot, orders) {
+  const raw = String(query || '').trim();
+  if (!raw) {
+    return '<div class="search-hint"><strong>Que recherchez-vous ?</strong><p>Une bande, un client, une vente, une charge ou une commande. Tapez quelques lettres pour voir les résultats.</p></div>';
+  }
+  const groups = [];
+  const bands = (snapshot.bands || []).filter((band) => searchMatch(raw, band.name, band.strain, band.supplier));
+  if (bands.length) {
+    groups.push(`<div class="search-group"><h4>Bandes <span>${number(bands.length)}</span></h4>${bands.slice(0, 6).map((band) => searchResultButton({
+      page: 'bands', bandId: band.id, emoji: '🐔',
+      title: band.name,
+      subtitle: `${band.strain || 'Souche non précisée'} · ${number(activeBirds(band, snapshot))} sujets disponibles`,
+    })).join('')}</div>`);
+  }
+  const sales = (snapshot.sales || []).filter((sale) => searchMatch(raw, sale.client_name, sale.client_phone, sale.client_address, sale.payment_method));
+  if (sales.length) {
+    groups.push(`<div class="search-group"><h4>Ventes et clients <span>${number(sales.length)}</span></h4>${sales.slice(0, 6).map((sale) => searchResultButton({
+      page: 'sales', emoji: '🧾',
+      title: sale.client_name || 'Vente comptoir',
+      subtitle: `${dateLabel(sale.sale_date)} · ${number(sale.heads)} sujets · ${currency(sale.total_amount)}`,
+    })).join('')}</div>`);
+  }
+  const charges = (snapshot.charges || []).filter((charge) => searchMatch(raw, charge.category, charge.description));
+  if (charges.length) {
+    groups.push(`<div class="search-group"><h4>Charges <span>${number(charges.length)}</span></h4>${charges.slice(0, 6).map((charge) => searchResultButton({
+      page: 'expenses', emoji: '💸',
+      title: charge.description || charge.category || 'Charge',
+      subtitle: `${dateLabel(charge.charge_date)} · ${currency(charge.amount)}`,
+    })).join('')}</div>`);
+  }
+  const orderList = Array.isArray(orders)
+    ? orders.filter((order) => searchMatch(raw, order.client_name, order.client_phone, order.band_name, order.neighborhood))
+    : [];
+  if (orderList.length) {
+    groups.push(`<div class="search-group"><h4>Commandes <span>${number(orderList.length)}</span></h4>${orderList.slice(0, 6).map((order) => searchResultButton({
+      page: 'orders', emoji: '📦',
+      title: order.client_name,
+      subtitle: `${ORDER_STATUS_LABELS[order.status] || order.status} · ${number(order.quantity)} sujets · ${order.band_name || 'Bande non définie'}`,
+    })).join('')}</div>`);
+  }
+  if (!groups.length) {
+    return `<div class="search-hint"><strong>Aucun résultat pour « ${esc(raw)} »</strong><p>Essayez un autre nom, un numéro de téléphone ou une date.</p></div>`;
+  }
+  return groups.join('');
+}
+
+async function openSearchDialog() {
+  let orders = [];
+  if (supabaseReady()) {
+    try { await loadOrders({ force: false }); orders = ordersState.orders; } catch (error) { orders = ordersState.orders || []; }
+  }
+  const snapshot = await getSnapshot();
+  setDialog('Rechercher', 'Retrouvez une bande, un client, une vente, une charge ou une commande.', `
+    <div class="dialog-form search-dialog" role="search">
+      <div class="field full">
+        <label for="global-search-input">Rechercher dans l’application</label>
+        <input id="global-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="Nom, téléphone, bande, montant…" />
+        <small class="field-hint">Les résultats s’affichent au fur et à mesure de la saisie.</small>
+      </div>
+      <div class="search-results" id="global-search-results" aria-live="polite">
+        ${renderSearchResults('', snapshot, orders)}
+      </div>
+    </div>`);
+  const input = $('#global-search-input');
+  const results = $('#global-search-results');
+  input?.addEventListener('input', () => { if (results) results.innerHTML = renderSearchResults(input.value, snapshot, orders); });
+  input?.focus();
 }
 
 async function openAccountDialog() {
@@ -2604,15 +2694,22 @@ async function openAccountDialog() {
         <input id="account-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" value="${esc(formatWhatsAppNumber(whatsapp))}" placeholder="+223 78 31 48 18" aria-describedby="account-whatsapp-hint" />
         <small class="field-hint" id="account-whatsapp-hint">Chaque nouvelle commande publique envoie une alerte à ce numéro.</small>
       </div>
-      <div class="dialog-actions" style="justify-content:space-between">
+      <div class="account-actions">
+        <button class="secondary-button" type="button" data-action="change-password">Changer le mot de passe</button>
+        <button class="secondary-button" type="button" data-action="restore-app">Restaurer l’application</button>
         <button class="secondary-button danger-outline" type="button" data-action="logout">Se déconnecter</button>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
-          <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le numéro</button>
-          <button class="secondary-button" type="button" data-action="change-password">Changer le mot de passe</button>
-          <button class="secondary-button" type="button" data-action="restore-app">Restaurer l’application</button>
-          <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
+      </div>
+      <div class="account-save-row">
+        <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
+        <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le numéro</button>
+        <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
+      </div>
+      <div class="account-danger-zone">
+        <div>
+          <strong>Supprimer le compte</strong>
+          <p>Efface définitivement votre compte et toutes vos données : bandes, relevés, ventes et charges.</p>
         </div>
+        <button class="secondary-button danger-outline" type="button" data-action="delete-account">Supprimer le compte</button>
       </div>
     </div>`;
   setDialog('Mon compte', 'Synchronisation multi-appareils sécurisée.', body);
@@ -2670,6 +2767,80 @@ async function restoreApp() {
   } catch (error) {
     toast(error?.message || 'Restauration impossible.', true);
   }
+}
+
+async function clearLocalAccountData() {
+  const userId = session?.user?.id;
+  try {
+    if (db) {
+      db.close();
+      db = null;
+    }
+    await new Promise((resolve) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  } catch (error) {
+    console.warn('Purge du stockage local impossible', error);
+  }
+  try {
+    if (userId) {
+      localStorage.removeItem(`remote-snapshot:${userId}`);
+      localStorage.removeItem(`poulet-pro-migrated-${userId}`);
+    }
+  } catch (error) { /* stockage indisponible */ }
+  remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
+  remoteSettings = {};
+  dataLoaded = false;
+}
+
+async function deleteOwnAccount() {
+  if (!session) return;
+  if (!confirm('Dernière confirmation : supprimer définitivement votre compte et toutes vos données ?')) return;
+  const button = $('#delete-account-confirm');
+  if (button) button.disabled = true;
+  try {
+    await apiRequest('/rest/v1/rpc/delete_own_account', { method: 'POST', body: {} });
+  } catch (error) {
+    if (button) button.disabled = false;
+    toast(error?.message || 'Suppression du compte impossible.', true);
+    return;
+  }
+  await clearLocalAccountData();
+  await signOut();
+  if ($('#app-dialog').open) closeDialog();
+  showAuthScreen();
+  toast('Compte supprimé. Toutes les données ont été effacées.');
+}
+
+async function openDeleteAccountDialog() {
+  if (!session) return;
+  const address = session.user.email || '';
+  const identifier = address.endsWith(`@${PHONE_DOMAIN}`) ? `+${address.split('@')[0]}` : address;
+  setDialog('Supprimer le compte', 'Cette action est définitive et irréversible.', `
+    <div class="dialog-form">
+      <div class="account-danger-note">
+        <strong>${esc(userLabel())}</strong>
+        <p>${esc(identifier)}</p>
+        <p>Toutes vos données seront définitivement supprimées : bandes, relevés, ventes, charges et profil. Cette action ne peut pas être annulée.</p>
+      </div>
+      <div class="field full">
+        <label for="delete-account-word">Tapez « SUPPRIMER » pour confirmer</label>
+        <input id="delete-account-word" type="text" autocomplete="off" autocapitalize="characters" placeholder="SUPPRIMER" />
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog>Annuler</button>
+        <button class="secondary-button danger-outline" type="button" id="delete-account-confirm" data-action="delete-account-confirm" disabled>Supprimer définitivement</button>
+      </div>
+    </div>`);
+  const input = $('#delete-account-word');
+  const confirmButton = $('#delete-account-confirm');
+  input?.addEventListener('input', () => {
+    if (confirmButton) confirmButton.disabled = normalizeAscii(input.value).trim().toUpperCase() !== 'SUPPRIMER';
+  });
+  input?.focus();
 }
 
 async function saveAccountWhatsApp(button) {
@@ -2817,6 +2988,16 @@ async function handleAction(action, button = null) {
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }
   else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }
   else if (action === 'account' || action === 'settings') await openAccountDialog();
+  else if (action === 'search') await openSearchDialog().catch((error) => toast(error?.message || 'Recherche indisponible.', true));
+  else if (action === 'search-open') {
+    const page = button?.dataset?.searchPage || 'dashboard';
+    const bandId = button?.dataset?.bandId || '';
+    closeDialog();
+    await setPage(page, { pushHistory: true, scrollToTop: true });
+    if (bandId) await openBandDetail(bandId);
+  }
+  else if (action === 'delete-account') await openDeleteAccountDialog();
+  else if (action === 'delete-account-confirm') await deleteOwnAccount();
   else if (action === 'save-whatsapp') await saveAccountWhatsApp(button);
   else if (action === 'change-password') await openChangePasswordDialog();
   else if (action === 'restore-app') await restoreApp();
