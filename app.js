@@ -1682,6 +1682,9 @@ async function handleSubmit(event) {
   const formId = form && typeof form.getAttribute === 'function' ? form.getAttribute('id') : form && form.id;
   if (!(form instanceof HTMLFormElement)) return;
   event.preventDefault();
+  // Seuls ces formulaires sont traités ici ; les dialogues dédiés (mise en
+  // vente, partage, etc.) gèrent eux-mêmes leur soumission.
+  if (!['band-form', 'daily-form', 'sale-form', 'charge-form'].includes(formId)) return;
   const values = Object.fromEntries(new FormData(form).entries());
   const numericFields = ['initial_count', 'chick_unit_cost', 'transport_cost', 'target_weight_kg', 'target_age_days', 'mortality', 'culls', 'feed_starter_kg', 'feed_grower_kg', 'feed_finisher_kg', 'water_liters', 'avg_weight_kg', 'health_cost', 'other_cost', 'quantity', 'min_quantity', 'unit_cost', 'heads', 'unit_weight_kg', 'price_per_kg', 'paid_amount', 'amount'];
   for (const key of numericFields) {
@@ -1772,7 +1775,7 @@ async function loadOrders({ force = false } = {}) {
   return ordersState.orders;
 }
 
-async function publishSellingStock({ heads, min, max }) {
+async function publishSellingStock({ heads, min, max, band = null }) {
   if (!supabaseReady()) throw new Error('Supabase n’est pas configuré.');
   const payload = {
     stock_heads: Math.max(0, Math.floor(Number(heads) || 0)),
@@ -1780,6 +1783,10 @@ async function publishSellingStock({ heads, min, max }) {
     max_price: Math.min(25000, Math.max(2500, Number(max) || 25000)),
     updated_at: new Date().toISOString(),
   };
+  if (band) {
+    payload.band_id = band.id || null;
+    payload.band_name = band.name || null;
+  }
   if (payload.min_price > payload.max_price) {
     const swap = payload.min_price;
     payload.min_price = payload.max_price;
@@ -1794,7 +1801,7 @@ async function publishSellingStock({ heads, min, max }) {
 async function loadPublicStock() {
   if (!supabaseReady()) return null;
   try {
-    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,updated_at');
+    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,band_id,band_name,updated_at');
     ordersState.publicStock = Array.isArray(rows) && rows.length ? rows[0] : null;
   } catch {
     ordersState.publicStock = null;
@@ -1820,25 +1827,46 @@ async function deductSellingStock(quantity) {
 
 async function openSellingModal() {
   const snapshot = await getSnapshot();
-  const liveStock = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
+  const bands = snapshot.bands
+    .filter(isOpenBand)
+    .map((band) => ({ band, birds: activeBirds(band, snapshot) }))
+    .filter((entry) => entry.birds > 0)
+    .sort((a, b) => String(a.band.arrival_date || '').localeCompare(String(b.band.arrival_date || '')));
   const current = ordersState.publicStock || {};
-  const currentHeads = Math.max(0, Number(current.stock_heads) || 0) || liveStock;
+  const currentHeads = Math.max(0, Number(current.stock_heads) || 0);
+  if (!bands.length) {
+    const sw = $('#selling-switch');
+    if (sw) sw.checked = currentHeads > 0;
+    toast('Aucune bande active avec des sujets disponibles à vendre.', true);
+    return;
+  }
+  const currentBandId = current.band_id || '';
+  const selected = bands.find((entry) => entry.band.id === currentBandId) || bands[0];
+  const defaultHeads = selected.band.id === currentBandId && currentHeads > 0
+    ? Math.min(currentHeads, selected.birds)
+    : selected.birds;
   const currentMin = Number(current.min_price) || 2500;
   const currentMax = Number(current.max_price) || 25000;
   const fixed = currentMin === currentMax;
+  const wasActive = currentHeads > 0;
   let submitted = false;
-  setDialog('Mise en vente', 'Définissez les têtes et le prix proposés aux clients sur la page publique.', `
+  setDialog('Mise en vente', 'Choisissez la bande à vendre, les têtes et le prix proposés aux clients.', `
     <form class="dialog-form" id="selling-form"><div class="form-grid">
+      <div class="field full"><label for="selling-band">Bande à vendre *</label>
+        <select id="selling-band" name="band" required>
+          ${bands.map((entry) => `<option value="${esc(entry.band.id)}" ${entry.band.id === selected.band.id ? 'selected' : ''}>${esc(entry.band.name)} — ${number(entry.birds)} sujet${entry.birds > 1 ? 's' : ''} disponible${entry.birds > 1 ? 's' : ''}</option>`).join('')}
+        </select>
+        <small class="field-hint" id="selling-band-hint">Stock disponible dans cette bande : ${number(selected.birds)} tête${selected.birds > 1 ? 's' : ''}.</small></div>
       <div class="field full"><label for="selling-heads">Nombre de têtes destinées à la vente *</label>
-        <input id="selling-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required value="${esc(currentHeads)}" />
-        <small class="field-hint">Stock disponible dans l’élevage : ${number(liveStock)} tête${liveStock > 1 ? 's' : ''}.</small></div>
+        <input id="selling-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required value="${esc(defaultHeads)}" />
+        <small class="field-hint" id="selling-heads-hint">Le calcul de la vente sera fait sur la bande « ${esc(selected.band.name)} ».</small></div>
       <div class="field full"><label for="selling-mode">Mode de prix</label>
         <select id="selling-mode" name="mode">
           <option value="fixed" ${fixed ? 'selected' : ''}>Prix fixe par tête</option>
           <option value="range" ${!fixed ? 'selected' : ''}>Intervalle de prix</option>
         </select></div>
       <div class="field" data-selling-fixed><label for="selling-price">Prix par tête (FCFA) *</label>
-        <input id="selling-price" name="price" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(fixed ? currentMin : currentMin)}" /></div>
+        <input id="selling-price" name="price" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(currentMin)}" /></div>
       <div class="field" data-selling-min hidden><label for="selling-min">Prix minimum (FCFA) *</label>
         <input id="selling-min" name="min" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(currentMin)}" /></div>
       <div class="field" data-selling-max hidden><label for="selling-max">Prix maximum (FCFA) *</label>
@@ -1859,24 +1887,37 @@ async function openSellingModal() {
   };
   mode.addEventListener('change', updateMode);
   updateMode();
+  const bandSelect = $('#selling-band');
+  const syncBand = () => {
+    const entry = bands.find((item) => item.band.id === bandSelect.value) || bands[0];
+    const hint = $('#selling-band-hint');
+    const headsHint = $('#selling-heads-hint');
+    if (hint) hint.textContent = `Stock disponible dans cette bande : ${number(entry.birds)} tête${entry.birds > 1 ? 's' : ''}.`;
+    if (headsHint) headsHint.textContent = `Le calcul de la vente sera fait sur la bande « ${entry.band.name} ».`;
+    const headsInput = $('#selling-heads');
+    if (headsInput && (Number(headsInput.value) || 0) > entry.birds) headsInput.value = String(entry.birds);
+  };
+  bandSelect.addEventListener('change', syncBand);
   $('#selling-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
+    const entry = bands.find((item) => item.band.id === bandSelect.value) || bands[0];
     const heads = Number($('#selling-heads')?.value) || 0;
     const isRange = $('#selling-mode')?.value === 'range';
     let min, max;
     if (isRange) { min = Number($('#selling-min')?.value) || 0; max = Number($('#selling-max')?.value) || 0; }
     else { min = max = Number($('#selling-price')?.value) || 0; }
     if (heads < 1) { toast('Indiquez un nombre de têtes valide.', true); return; }
-    if (heads > liveStock) { toast(`Vous ne pouvez pas mettre en vente plus de ${number(liveStock)} tête${liveStock > 1 ? 's' : ''} (stock de l’élevage).`, true); return; }
+    if (heads > entry.birds) { toast(`La bande « ${entry.band.name} » ne compte que ${number(entry.birds)} sujet${entry.birds > 1 ? 's' : ''} disponible${entry.birds > 1 ? 's' : ''}.`, true); return; }
     if (min < 2500 || max > 25000 || min > max) { toast('Prix invalide : 2 500 à 25 000 FCFA, minimum ≤ maximum.', true); return; }
     const button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
-      await publishSellingStock({ heads, min, max });
+      await publishSellingStock({ heads, min, max, band: entry.band });
       submitted = true;
       closeDialog();
-      toast(`Mise en vente activée : ${number(heads)} tête${heads > 1 ? 's' : ''} à ${isRange ? `${currency(min)} – ${currency(max)}` : currency(min)}.`);
+      toast(`Mise en vente activée : ${number(heads)} tête${heads > 1 ? 's' : ''} de la bande « ${entry.band.name} » à ${isRange ? `${currency(min)} – ${currency(max)}` : currency(min)}.`);
       await render();
+      openShareDialog(entry.band);
     } catch (error) {
       toast(error?.message || 'Publication impossible.', true);
     } finally {
@@ -1885,7 +1926,7 @@ async function openSellingModal() {
   });
   const dialog = $('#app-dialog');
   const onClose = () => {
-    if (!submitted) {
+    if (!submitted && !wasActive) {
       const sw = $('#selling-switch');
       if (sw) sw.checked = false;
     }
@@ -2051,24 +2092,33 @@ function openTransactionDialog({
   });
 }
 
-function openAcceptedOrderDialog(order, records) {
+function openAcceptedOrderDialog(order, records, band = null) {
   const total = sum(records, (record) => Number(record.total_amount) || 0);
   const paid = sum(records, (record) => Number(record.paid_amount) || 0);
   const remaining = Math.max(0, total - paid);
+  const bandName = band?.name || order.band_name || '';
+  const receiptBand = band || (bandName ? { name: bandName } : null);
   openTransactionDialog({
     title: 'Commande acceptée',
-    subtitle: 'Envoyez la confirmation au client ou téléchargez son reçu.',
+    subtitle: bandName
+      ? `Bande « ${bandName} » · envoyez la confirmation au client ou téléchargez son reçu.`
+      : 'Envoyez la confirmation au client ou téléchargez son reçu.',
     clientName: order.client_name,
     clientPhone: order.client_phone,
     status: 'Commande acceptée ✅',
-    items: [{ label: 'Poulets de chair', quantity: Number(order.quantity) || 0, unitPrice: Number(order.price_per_head) || 0, total }],
+    items: [{
+      label: bandName ? `Poulets de chair — ${bandName}` : 'Poulets de chair',
+      quantity: Number(order.quantity) || 0,
+      unitPrice: Number(order.price_per_head) || 0,
+      total,
+    }],
     total,
     paid,
     remaining,
     neighborhood: order.neighborhood,
     extra: remaining > 0 ? `Solde à régler à la livraison : ${currency(remaining)}.` : 'Commande entièrement réglée.',
     receipt: makeOrderReceipt(order, records),
-    receiptBand: { name: 'Commande publique' },
+    receiptBand: receiptBand || { name: 'Commande publique' },
     receiptOptions: { title: 'COMMANDE CONFIRMÉE' },
   });
 }
@@ -2161,13 +2211,31 @@ async function validateOrder(orderId, button) {
     if (sellingHeads > 0 && Number(order.quantity) > sellingHeads) {
       throw new Error(`Mise en vente insuffisante : ${number(sellingHeads)} poulet${sellingHeads > 1 ? 's' : ''} encore disponible${sellingHeads > 1 ? 's' : ''} en ligne.`);
     }
+    // La vente est imputée à la bande choisie par le client (ou à celle
+    // actuellement mise en vente), pas répartie sur toutes les bandes.
+    const orderedBandId = order.band_id || publicStock?.band_id || null;
+    const targetBand = orderedBandId
+      ? snapshot.bands.find((band) => band.id === orderedBandId)
+      : null;
+    if (orderedBandId && !targetBand) {
+      throw new Error('La bande liée à cette commande n’existe plus. Mettez à jour la mise en vente.');
+    }
+    if (targetBand && !isOpenBand(targetBand)) {
+      throw new Error(`La bande « ${targetBand.name} » n’est plus active. Mettez à jour la mise en vente.`);
+    }
+    const targetBirds = targetBand ? activeBirds(targetBand, snapshot) : 0;
+    if (targetBand && Number(order.quantity) > targetBirds) {
+      throw new Error(`Stock insuffisant dans la bande « ${targetBand.name} » : ${number(targetBirds)} sujet${targetBirds > 1 ? 's' : ''} disponible${targetBirds > 1 ? 's' : ''} pour ${number(order.quantity)} demandé${Number(order.quantity) > 1 ? 's' : ''}.`);
+    }
     const pricePerHead = Number(order.price_per_head) || 0;
     const saleDate = today();
     const created = [];
     let remaining = Number(order.quantity) || 0;
-    const bands = active
-      .filter((band) => activeBirds(band, snapshot) > 0)
-      .sort((a, b) => (a.arrival_date || '').localeCompare(b.arrival_date || ''));
+    const bands = targetBand
+      ? [targetBand]
+      : active
+        .filter((band) => activeBirds(band, snapshot) > 0)
+        .sort((a, b) => (a.arrival_date || '').localeCompare(b.arrival_date || ''));
     for (const band of bands) {
       if (remaining <= 0) break;
       const take = Math.min(remaining, activeBirds(band, snapshot));
@@ -2216,7 +2284,7 @@ async function validateOrder(orderId, button) {
     toast(`Commande validée : ${number(order.quantity)} sujets déduits du stock.`);
     await deductSellingStock(order.quantity).catch((error) => console.error(error));
     await render();
-    openAcceptedOrderDialog(order, created.map((entry) => entry.record));
+    openAcceptedOrderDialog(order, created.map((entry) => entry.record), targetBand);
   } catch (error) {
     toast(error.message || 'Validation impossible.', true);
   } finally {
@@ -2269,17 +2337,38 @@ async function restoreOrder(orderId, button) {
   }
 }
 
-async function copyOrderLink() {
-  const url = new URL('./commander.html', location.href).href;
+function publicOrderUrl() {
+  return new URL('./commander.html', location.href).href;
+}
+
+function openShareDialog(band = null) {
+  const url = publicOrderUrl();
+  const bandName = band?.name || ordersState.publicStock?.band_name || '';
+  const message = `Bonjour ! Commandez vos poulets frais chez Volaille chez TALL${bandName ? ` (bande ${bandName})` : ''} : ${url}`;
+  setDialog('Partagez le lien de commande', 'Envoyez ce lien à vos clients : ils verront le stock et les prix en temps réel.', `
+    <div class="dialog-form">
+      <div class="field full"><label for="public-link">Lien de la page de commande</label>
+        <input id="public-link" readonly value="${esc(url)}" /></div>
+      <p class="share-note">${bandName ? `Bande en vente : <strong>${esc(bandName)}</strong>. ` : ''}Le stock affiché est mis à jour automatiquement.</p>
+      <div class="transaction-actions">
+        <button class="primary-button" type="button" data-action="copy-public-link">Copier le lien</button>
+        <a class="secondary-button" href="https://wa.me/?text=${encodeURIComponent(message)}" target="_blank" rel="noopener">Partager sur WhatsApp</a>
+      </div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
+    </div>`);
+  const input = $('#public-link');
+  if (input) input.select();
+}
+
+async function copyPublicLink() {
+  const url = publicOrderUrl();
   try {
     await navigator.clipboard.writeText(url);
     toast('Lien public copié.');
   } catch {
-    setDialog('Lien public', 'Partagez ce lien avec vos clients.', `
-      <div class="dialog-form"><div class="field full"><label for="public-link">Lien de commande</label><input id="public-link" readonly value="${esc(url)}" /></div>
-      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div></div>`);
     const input = $('#public-link');
     if (input) { input.focus(); input.select(); }
+    toast('Sélectionnez le lien affiché puis copiez-le.', true);
   }
 }
 
@@ -2330,7 +2419,7 @@ async function renderOrders(snapshot) {
     error = requestError.message;
   }
   try {
-    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,updated_at');
+    const rows = await supabaseRequest('/rest/v1/app_config?id=eq.1&select=stock_heads,min_price,max_price,band_id,band_name,updated_at');
     ordersState.publicStock = Array.isArray(rows) && rows.length ? rows[0] : null;
   } catch {
     ordersState.publicStock = null;
@@ -2354,6 +2443,7 @@ async function renderOrders(snapshot) {
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
       <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
+      <td>${order.band_name ? esc(order.band_name) : '—'}</td>
       <td>${esc(order.neighborhood)}</td>
       <td>${number(order.quantity)}</td>
       <td>${currency(order.price_per_head)}</td>
@@ -2367,6 +2457,7 @@ async function renderOrders(snapshot) {
     return `<tr>
       <td>${dateLabel(String(order.created_at || '').slice(0, 10))}</td>
       <td class="primary-cell">${esc(order.client_name)}<span class="secondary-cell">${esc(order.client_phone)}</span></td>
+      <td>${order.band_name ? esc(order.band_name) : '—'}</td>
       <td>${esc(order.neighborhood)}</td>
       <td>${number(order.quantity)}</td>
       <td>${currency(total)}</td>
@@ -2375,17 +2466,15 @@ async function renderOrders(snapshot) {
       <td class="orders-table-actions"><button class="secondary-button" type="button" data-action="restore-order" data-order-id="${esc(order.id)}">Restaurer</button></td>
     </tr>`;
   }).join('');
-  const actions = `<button class="secondary-button" type="button" data-action="copy-order-link">Copier le lien public</button>
-    <a class="secondary-button" href="./commander.html" target="_blank" rel="noopener">Ouvrir la page</a>
-    <label class="selling-switch" title="Activer ou désactiver la mise en vente publique">
+  const actions = `<label class="selling-switch" title="Activer ou désactiver la mise en vente publique">
       <input type="checkbox" id="selling-switch" ${publicStock && publicStock > 0 ? 'checked' : ''} />
       <span class="switch-track" aria-hidden="true"></span>
       <span class="switch-label">Mise en vente</span>
     </label>
-    <button class="secondary-button" type="button" data-action="publish-stock">Synchroniser avec l’élevage</button>
     <button class="primary-button" type="button" data-action="refresh-orders">Actualiser</button>`;
   const sellingMin = ordersState.publicStock ? Number(ordersState.publicStock.min_price) || 0 : 0;
   const sellingMax = ordersState.publicStock ? Number(ordersState.publicStock.max_price) || 0 : 0;
+  const sellingBand = ordersState.publicStock?.band_name || '';
   const sellingPrice = !sellingMin || !sellingMax
     ? 'prix non défini'
     : sellingMin === sellingMax
@@ -2394,6 +2483,12 @@ async function renderOrders(snapshot) {
   const sellingLabel = publicStock === null
     ? 'Mise en vente non configurée'
     : (publicStock > 0 ? `${number(publicStock)} tête${publicStock > 1 ? 's' : ''} en ligne` : 'Mise en vente désactivée (stock à 0)');
+  const bandLabel = sellingBand ? `Bande : <strong>${esc(sellingBand)}</strong>` : 'Bande non définie';
+  const noteActions = publicStock === null
+    ? ''
+    : publicStock > 0
+      ? ' · <button class="link-button" type="button" data-action="share-order-link">Partager le lien</button> · <button class="link-button" type="button" data-action="edit-selling">Modifier</button>'
+      : ' · <button class="link-button" type="button" data-action="edit-selling">Choisir une bande</button>';
   return `${header(actions)}
     <section class="metrics-grid">
       ${metricCard('En attente', number(pending.length), 'À traiter', 'orders', pending.length ? 'low-stock' : '')}
@@ -2401,14 +2496,14 @@ async function renderOrders(snapshot) {
       ${metricCard('Corbeille', number(refused.length), 'Purge automatique après 72 h', 'expenses')}
       ${metricCard('Stock publié', publicStock === null ? '—' : number(publicStock), `${number(liveStock)} sujets dans l’élevage`, 'stock')}
     </section>
-    <p class="orders-selling-note">Mise en vente : <strong>${esc(sellingLabel)}</strong> · ${esc(sellingPrice)}${publicStock > 0 ? ' · <a href="./commander.html" target="_blank" rel="noopener">voir la page client</a>' : ''}</p>
+    <p class="orders-selling-note">Mise en vente : <strong>${esc(sellingLabel)}</strong> · ${esc(sellingPrice)} · ${bandLabel}${noteActions}</p>
     ${error ? `<p class="orders-error">Impossible de rafraîchir les commandes : ${esc(error)}</p>` : ''}
     <section class="panel table-panel"><div class="panel-header"><div><h2>Demandes à traiter</h2><p>${open.length} commande${open.length > 1 ? 's' : ''} en attente · les commandes validées rejoignent automatiquement l’onglet Ventes.</p></div></div>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Prix / tête</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : emptyState('Aucune commande en attente', 'Partagez le lien public pour recevoir les demandes de vos clients.', '<button class="primary-button" type="button" data-action="copy-order-link">Copier le lien public</button>')}</section>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Bande</th><th>Quartier</th><th>Qté</th><th>Prix / tête</th><th>Total</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : emptyState('Aucune commande en attente', 'Activez la mise en vente pour recevoir les demandes de vos clients.', '')}</section>
     <section class="panel table-panel trash-panel"><div class="panel-header"><div><h2>Corbeille des commandes refusées</h2><p>Les commandes refusées sont conservées 72 heures, puis supprimées automatiquement.</p></div>
       ${refused.length ? '<button class="secondary-button danger-outline" type="button" data-action="empty-trash">Vider la corbeille</button>' : ''}</div>
-    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th><th>Actions</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
+    ${trashRows ? `<div class="table-wrap"><table><thead><tr><th>Commandée le</th><th>Client</th><th>Bande</th><th>Quartier</th><th>Qté</th><th>Total</th><th>Refusée le</th><th>Purge dans</th><th>Actions</th></tr></thead><tbody>${trashRows}</tbody></table></div>`
       : '<div class="empty-state trash-empty"><strong>La corbeille est vide</strong><p>Les commandes refusées apparaîtront ici avant leur suppression définitive.</p></div>'}</section>`;
 }
 
@@ -2713,9 +2808,10 @@ async function handleAction(action, button = null) {
   else if (action === 'new-sale') await openSaleForm();
   else if (action === 'new-charge') await openChargeForm();
   else if (action === 'refresh-orders') { await loadOrders({ force: true }).catch((error) => toast(error.message, true)); await render(); }
-  else if (action === 'publish-stock') await publishStock();
-  else if (action === 'cancel-selling') { const sw = $('#selling-switch'); if (sw) sw.checked = false; closeDialog(); }
-  else if (action === 'copy-order-link') await copyOrderLink();
+  else if (action === 'cancel-selling') closeDialog();
+  else if (action === 'edit-selling') await openSellingModal();
+  else if (action === 'share-order-link') openShareDialog();
+  else if (action === 'copy-public-link') await copyPublicLink();
   else if (action === 'empty-trash') await emptyTrash();
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
   else if (action === 'refuse-order') { if (button?.dataset?.orderId) await refuseOrder(button.dataset.orderId, button); }

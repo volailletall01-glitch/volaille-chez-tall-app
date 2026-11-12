@@ -70,17 +70,18 @@ Un relevé par bande et par date, limité à l’essentiel :
 - **Crédits clients** : liste des clients avec le montant restant dû, possibilité d’enregistrer le paiement du solde et de télécharger le reçu correspondant.
 
 ### Mes Commandes
-- **Lien public de commande** (`commander.html`) à partager aux clients : nombre de têtes réellement mises en vente et prix configurés par le gérant, affichés en temps réel (rafraîchissement automatique toutes les 20 secondes et à l’ouverture de la page).
+- **Lien public de commande** (`commander.html`) à partager aux clients : bande en vente, nombre de têtes réellement mises en vente et prix configurés par le gérant, affichés en temps réel (rafraîchissement automatique toutes les 20 secondes et à l’ouverture de la page).
 - **Stock mis en vente** : le nombre de têtes défini par le gérant est la limite stricte du formulaire client. La quantité saisie est plafonnée à ce maximum, et chaque commande validée est automatiquement déduite de ce stock en ligne (sans toucher au reste de l’élevage).
+- **Bande en vente** : le nom de la bande choisie par le gérant s’affiche sur la page publique, dans l’alerte WhatsApp envoyée au gestionnaire, sur la demande du client et sur le reçu PDF de la commande validée. La vente est imputée à cette bande.
 - Si le stock mis en vente atteint 0 (ou si le gérant désactive la vente), le formulaire disparaît et affiche « Désolé, le stock est actuellement épuisé. »
 - **Prix fixe** : si le gérant définit un prix unique (ou prix min = prix max), le client voit uniquement « Prix unitaire : 3 500 FCFA », en lecture seule, sans champ de saisie.
 - **Intervalle de prix** : si prix min < prix max, le client voit « Choisissez votre prix entre 2 500 FCFA et 4 500 FCFA » ; la saisie est strictement bornée à cet intervalle (les valeurs hors bornes sont ramenées automatiquement).
 - Le client saisit nom et prénom, téléphone, quartier, quantité et (si intervalle) son prix par tête. **Le total (quantité × prix unitaire) se recalcule instantanément** à chaque changement. La commande est envoyée avec le statut **En attente** et un message de remerciement s’affiche.
-- **Alerte gestionnaire** : dès l’envoi, la page publique propose (et tente d’ouvrir automatiquement) un message WhatsApp prérempli vers le numéro du gestionnaire, avec le nom, le téléphone, le quartier, la quantité, le prix et le total estimé.
+- **Alerte gestionnaire** : dès l’envoi, la page publique propose (et tente d’ouvrir automatiquement) un message WhatsApp prérempli vers le numéro du gestionnaire, avec le nom, le téléphone, le quartier, la bande, la quantité, le prix et le total estimé.
 - En bas de la page, un grand bandeau suit la commande : « Commande en traitement — veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande ». Dès que le gérant valide, il devient un message de confirmation et de remerciement (et un message d’excuse si la commande est refusée). Le suivi reste visible si le client revient plus tard sur le même appareil.
-- Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (la commande bascule automatiquement dans les ventes, la quantité est déduite du stock de l’élevage **et** du stock mis en vente) et bouton **Refuser** (la commande part dans la **Corbeille**, sans impact sur le stock).
-- **Mise en vente (Espace Gérant)** : un interrupteur « Mise en vente » permet d’activer ou de désactiver la vente publique. À l’activation, une fenêtre demande le nombre de têtes destinées à la vente et le prix par tête, en prix fixe ou en intervalle (min–max), dans la fourchette 2 500 – 25 000 FCFA. Un rappel affiche en permanence l’état de la mise en vente (têtes en ligne, prix fixe ou intervalle). La désactivation remet le stock affiché à 0 ; les prix configurés sont conservés.
-- Le bouton **Synchroniser avec l’élevage** aligne le stock en ligne sur le nombre de sujets réellement présents, sans modifier les prix configurés. Les ventes et relevés quotidiens ne modifient jamais la mise en vente.
+- Côté gérant : liste des demandes avec une colonne **Bande**, les détails du client, bouton **Valider** (la commande bascule automatiquement dans les ventes sur la bande concernée, la quantité est déduite du stock de l’élevage **et** du stock mis en vente) et bouton **Refuser** (la commande part dans la **Corbeille**, sans impact sur le stock).
+- **Mise en vente (Espace Gérant)** : un interrupteur « Mise en vente » permet d’activer ou de désactiver la vente publique. À l’activation, une fenêtre demande la **bande à vendre** (parmi les bandes actives avec sujets disponibles), le nombre de têtes destinées à la vente et le prix par tête, en prix fixe ou en intervalle (min–max), dans la fourchette 2 500 – 25 000 FCFA. Le plafond de têtes suit le stock de la bande choisie. Un rappel affiche en permanence l’état de la mise en vente (têtes en ligne, prix, bande) avec les liens **Partager le lien** et **Modifier**. La désactivation remet le stock affiché à 0 ; la bande et les prix configurés sont conservés.
+- **Après la création de la mise en vente**, une fenêtre propose de partager le lien public : copie du lien ou envoi WhatsApp. L’onglet ne comporte plus de boutons « Copier le lien public », « Ouvrir la page » ni « Synchroniser avec l’élevage ». Les ventes et relevés quotidiens ne modifient jamais la mise en vente.
 - **Corbeille** : les commandes refusées y restent 72 heures (compte à rebours affiché), puis sont purgées automatiquement. Un bouton **Restaurer** remet une commande refusée en attente (elle redevient traitable et le bandeau du client repasse à « Commande en traitement ») ; un autre bouton permet de vider la corbeille immédiatement.
 - Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 
@@ -118,6 +119,7 @@ POULET/
 ├── supabase/commandes.sql     # Commandes publiques, stock publié (RLS)
 ├── supabase/auth-sync.sql     # Compte, bandes, relevés, ventes, charges (RLS)
 ├── supabase/pwa-whatsapp.sql  # Colonnes WhatsApp (profil + numéro publié)
+├── supabase/pwa-selling-band.sql # Bande vendue (app_config + commandes)
 ├── app.js                     # Interface, auth, synchronisation, calculs, reçus PDF
 ├── styles.css                 # Mise en page responsive
 ├── manifest.webmanifest       # Configuration d’installation PWA
@@ -139,10 +141,11 @@ POULET/
 1. Exécuter `supabase/commandes.sql` dans **Supabase → SQL Editor** (commandes publiques, stock, règles RLS).
 2. Exécuter `supabase/auth-sync.sql` dans le même éditeur (comptes, profils, bandes, relevés, ventes, charges, paramètres + RLS).
 3. Exécuter `supabase/pwa-whatsapp.sql` (colonnes `profiles.whatsapp` et `app_config.manager_whatsapp`).
-4. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
-5. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-6. Dans l’application, créer un compte puis ouvrir **Mes Commandes → Publier le stock** pour rendre le stock visible sur la page publique.
-7. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
+4. Exécuter `supabase/pwa-selling-band.sql` (colonnes `band_id` / `band_name` sur `app_config` et `orders`).
+5. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
+6. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+7. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
+8. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
 
 ## Installer
 

@@ -73,6 +73,7 @@
 
   function recapLine(order) {
     const parts = [];
+    if (order.band_name) parts.push(`bande ${order.band_name}`);
     if (order.quantity) parts.push(`${amount(order.quantity)} poulet${Number(order.quantity) > 1 ? 's' : ''}`);
     if (order.price_per_head) parts.push(`${money(order.price_per_head)} par tête`);
     if (order.neighborhood) parts.push(`livraison à ${order.neighborhood}`);
@@ -130,7 +131,15 @@
     const rawMax = stock && Number(stock.max_price) ? Number(stock.max_price) : MAX_PRICE;
     const min = Math.min(rawMin, rawMax);
     const max = Math.max(rawMin, rawMax);
-    return { stock, heads, min, max, fixed: min === max };
+    return {
+      stock,
+      heads,
+      min,
+      max,
+      fixed: min === max,
+      bandId: stock?.band_id || null,
+      bandName: stock?.band_name || '',
+    };
   }
 
   function applyPriceMode({ fixed, min, max }) {
@@ -164,10 +173,16 @@
   }
 
   function renderStock() {
-    const { stock, heads, min, max, fixed } = sellingConfig();
+    const { stock, heads, min, max, fixed, bandName } = sellingConfig();
     const priceText = fixed
       ? `Prix unitaire : ${money(min)}`
       : `Choisissez votre prix entre ${money(min)} et ${money(max)}`;
+
+    const bandNode = $('#band-name');
+    if (bandNode) {
+      bandNode.hidden = !bandName;
+      bandNode.textContent = bandName ? `Bande : ${bandName}` : '';
+    }
 
     if (!configured) {
       $('#stock-state').textContent = 'Indisponible';
@@ -296,10 +311,11 @@
       `Téléphone : ${values.client_phone}`,
       `Quartier : ${values.neighborhood}`,
       `Quantité : ${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''}`,
+      values.band_name ? `Bande : ${values.band_name}` : null,
       `Prix proposé : ${money(values.price_per_head)} par tête`,
       `Total estimé : ${money(total)}`,
       `Reçue le ${when}`,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     link.href = `https://wa.me/${manager}?text=${encodeURIComponent(message)}`;
     link.hidden = false;
     window.setTimeout(() => {
@@ -341,6 +357,9 @@
         setHint(freshProblem, true);
         return;
       }
+      const { bandId, bandName } = sellingConfig();
+      values.band_id = bandId;
+      values.band_name = bandName || null;
       const rows = await request('/rest/v1/orders', {
         method: 'POST',
         headers: { Prefer: 'return=representation' },
@@ -352,7 +371,7 @@
       updateTotal();
       $('#thanks-title').textContent = `Merci infiniment, ${values.client_name.split(' ')[0]} !`;
       $('#thanks-message').textContent = 'Votre commande a bien été reçue. Nous vous contactons très vite pour confirmer la livraison.';
-      $('#thanks-recap').textContent = `${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''} · ${money(values.price_per_head)} par tête · total estimé ${money(total)} · livraison à ${values.neighborhood} · ${values.client_phone}`;
+      $('#thanks-recap').textContent = `${values.band_name ? `Bande ${values.band_name} · ` : ''}${amount(values.quantity)} poulet${values.quantity > 1 ? 's' : ''} · ${money(values.price_per_head)} par tête · total estimé ${money(total)} · livraison à ${values.neighborhood} · ${values.client_phone}`;
       state.thanks = true;
       state.order = {
         ...values,
