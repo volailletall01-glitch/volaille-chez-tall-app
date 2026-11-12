@@ -209,6 +209,7 @@ let remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
 let remoteSettings = {};
 let dataLoaded = false;
 let authMode = 'signin';
+let pendingAuth = null;
 
 function readStoredSession() {
   try {
@@ -334,33 +335,106 @@ function formatWhatsAppNumber(digits) {
   return value ? `+${value}` : '';
 }
 
-async function signInWithIdentifier(identifier, password) {
+function totpFactorFrom(user) {
+  const factors = Array.isArray(user?.factors) ? user.factors : [];
+  return factors.find((factor) => {
+    const type = factor.factor_type || factor.type;
+    return type === 'totp' && factor.status === 'verified';
+  }) || null;
+}
+
+async function fetchAuthUser(token) {
+  return authRequest('/auth/v1/user', { method: 'GET', token });
+}
+
+async function clearUnverifiedFactors(user, token) {
+  const factors = Array.isArray(user?.factors) ? user.factors : [];
+  const stale = factors.filter((factor) => {
+    const type = factor.factor_type || factor.type;
+    return type === 'totp' && factor.status !== 'verified';
+  });
+  await Promise.allSettled(stale.map((factor) =>
+    authRequest(`/auth/v1/factors/${encodeURIComponent(factor.id)}`, { method: 'DELETE', token })));
+}
+
+async function enrollTotpFactor(token) {
+  const enrollment = await authRequest('/auth/v1/factors', {
+    token,
+    body: { factor_type: 'totp', friendly_name: 'Volaille chez TALL' },
+  });
+  if (!enrollment?.id) throw new Error('Impossible de préparer la double authentification.');
+  return enrollment;
+}
+
+async function createTotpChallenge(factorId, token) {
+  const challenge = await authRequest(`/auth/v1/factors/${encodeURIComponent(factorId)}/challenge`, {
+    token,
+    body: {},
+  });
+  if (!challenge?.id) throw new Error('Impossible de préparer la vérification.');
+  return challenge.id;
+}
+
+async function verifyTotpCode(factorId, challengeId, code, token) {
+  return authRequest(`/auth/v1/factors/${encodeURIComponent(factorId)}/verify`, {
+    token,
+    body: { challenge_id: challengeId, code },
+  });
+}
+
+function totpQrSource(qrCode) {
+  const value = String(qrCode || '').trim();
+  if (!value) return '';
+  if (/^data:image\//i.test(value)) return value;
+  if (value.startsWith('<svg') || value.startsWith('<?xml')) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(value)}`;
+  }
+  return value;
+}
+
+async function prepareMfaChallenge(payload, email = '') {
+  const token = payload.access_token;
+  const user = await fetchAuthUser(token);
+  const factor = totpFactorFrom(user);
+  if (factor) {
+    const challengeId = await createTotpChallenge(factor.id, token);
+    return { email: email || user.email || '', passwordPayload: payload, factorId: factor.id, challengeId, mode: 'verify' };
+  }
+  await clearUnverifiedFactors(user, token);
+  const enrollment = await enrollTotpFactor(token);
+  const challengeId = await createTotpChallenge(enrollment.id, token);
+  return {
+    email: email || user.email || '',
+    passwordPayload: payload,
+    factorId: enrollment.id,
+    challengeId,
+    mode: 'enroll',
+    qrCode: totpQrSource(enrollment.totp?.qr_code),
+    secret: enrollment.totp?.secret || '',
+  };
+}
+
+async function beginPasswordSignIn(identifier, password) {
   const email = normalizeIdentifier(identifier);
   const payload = await authRequest('/auth/v1/token?grant_type=password', {
     body: { email, password },
   });
-  storeSession(payload);
-  await upsertProfile();
-  return session;
+  if (!payload?.access_token) throw new Error('Email ou mot de passe incorrect.');
+  return prepareMfaChallenge(payload, email);
 }
 
-async function signUpWithIdentifier(identifier, password, whatsapp) {
+async function signUpWithIdentifier(identifier, password) {
   const email = normalizeIdentifier(identifier);
-  const normalizedWhatsApp = normalizeWhatsAppNumber(whatsapp);
+  if (email.endsWith(`@${PHONE_DOMAIN}`)) {
+    throw new Error('Créez votre compte avec une adresse email réelle.');
+  }
   const payload = await authRequest('/auth/v1/signup', {
-    body: {
-      email,
-      password,
-      data: { phone: phoneFromIdentifier(email) || normalizedWhatsApp, whatsapp: normalizedWhatsApp },
-    },
+    body: { email, password },
   });
   if (!payload?.access_token) {
-    throw new Error('Compte créé. La confirmation par email est encore active : validez le lien reçu puis reconnectez-vous.');
+    throw new Error('Compte créé. Confirmez votre email puis reconnectez-vous.');
   }
-  storeSession(payload);
-  const saved = await upsertProfile('', normalizedWhatsApp);
-  if (saved) await publishManagerWhatsApp(normalizedWhatsApp);
-  return session;
+  return payload;
 }
 
 async function upsertProfile(displayName = '', whatsapp = '') {
@@ -430,6 +504,7 @@ async function syncManagerWhatsApp() {
 async function signOut() {
   const token = session?.access_token;
   persistSession(null);
+  pendingAuth = null;
   remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
   remoteSettings = {};
   dataLoaded = false;
@@ -2531,13 +2606,84 @@ function authBusy(busy) {
 
 function friendlyAuthError(error) {
   const message = String(error?.message || error || '');
-  if (/invalid login credentials/i.test(message)) return 'Email/téléphone ou mot de passe incorrect.';
+  if (/invalid login credentials/i.test(message)) return 'Email ou mot de passe incorrect.';
   if (/user already registered|already been registered/i.test(message)) return 'Ce compte existe déjà. Utilisez l’onglet Connexion.';
   if (/email not confirmed/i.test(message)) return 'Cet email doit encore être confirmé.';
   if (/password should be at least/i.test(message)) return 'Le mot de passe doit contenir au moins 6 caractères.';
   if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis réessayez.';
   if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. Vérifiez votre réseau.';
   return message || 'Connexion impossible pour le moment.';
+}
+
+function friendlyTotpError(error) {
+  const message = String(error?.message || error || '');
+  if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis réessayez.';
+  if (/challenge.*(expired|not found)|invalid.*challenge/i.test(message)) return 'La vérification a expiré. Saisissez un nouveau code.';
+  if (/invalid|incorrect|mismatch|totp/i.test(message)) return 'Code incorrect. Vérifiez l’heure de votre téléphone puis réessayez.';
+  if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. Vérifiez votre réseau.';
+  return message || 'Vérification impossible pour le moment.';
+}
+
+function setTotpError(message) {
+  const node = $('#auth-totp-error');
+  if (!node) return;
+  node.textContent = message || '';
+  node.hidden = !message;
+}
+
+function setAuthStep(step) {
+  const showTotp = step === 'totp';
+  $$('[data-auth-step="login"]').forEach((node) => { node.hidden = showTotp; });
+  const totpForm = $('#auth-totp-form');
+  if (totpForm) totpForm.hidden = !showTotp;
+  if (showTotp) {
+    setTotpError('');
+    window.setTimeout(() => $('#auth-totp-code')?.focus(), 80);
+  } else {
+    const code = $('#auth-totp-code');
+    if (code) code.value = '';
+    setTotpError('');
+    window.setTimeout(() => $('#auth-identifier')?.focus(), 80);
+  }
+}
+
+function totpBusy(busy) {
+  const button = $('#auth-totp-submit');
+  const spinner = $('#auth-totp-spinner');
+  const label = $('#auth-totp-submit-label');
+  if (!button) return;
+  button.disabled = busy;
+  if (spinner) spinner.hidden = !busy;
+  if (label) {
+    if (busy) label.textContent = 'Vérification…';
+    else label.textContent = pendingAuth?.mode === 'enroll' ? 'Activer et se connecter' : 'Vérifier et se connecter';
+  }
+}
+
+function showTotpStep(challenge) {
+  const enroll = $('#auth-totp-enroll');
+  const title = $('#auth-totp-title');
+  const text = $('#auth-totp-text');
+  const qr = $('#auth-totp-qr');
+  const secret = $('#auth-totp-secret');
+  const secretLine = secret?.closest('.auth-totp-secret');
+  const isEnroll = challenge.mode === 'enroll';
+  if (enroll) enroll.hidden = !isEnroll;
+  if (title) title.textContent = isEnroll ? 'Configurer la double authentification' : 'Double authentification';
+  if (text) {
+    text.textContent = isEnroll
+      ? 'Scannez le QR code avec Google Authenticator, Authy ou Microsoft Authenticator, puis saisissez le code à 6 chiffres.'
+      : 'Saisissez le code à 6 chiffres affiché par votre application d’authentification.';
+  }
+  if (qr) {
+    if (isEnroll && challenge.qrCode) qr.src = challenge.qrCode;
+    else qr.removeAttribute('src');
+  }
+  if (secret) secret.textContent = isEnroll ? (challenge.secret || '') : '';
+  if (secretLine) secretLine.hidden = !isEnroll || !challenge.secret;
+  const submitLabel = $('#auth-totp-submit-label');
+  if (submitLabel) submitLabel.textContent = isEnroll ? 'Activer et se connecter' : 'Vérifier et se connecter';
+  setAuthStep('totp');
 }
 
 function setAuthMode(mode) {
@@ -2552,8 +2698,8 @@ function setAuthMode(mode) {
   if (password) password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   const hint = $('#auth-hint');
   if (hint) hint.textContent = authMode === 'signup'
-    ? 'Votre historique sera synchronisé sur tous vos appareils dès la création du compte.'
-    : 'Retrouvez vos bandes, ventes et charges sur ordinateur comme sur téléphone.';
+    ? 'Créez votre compte puis configurez la double authentification avec votre application d’authentification.'
+    : 'Un code à 6 chiffres de votre application d’authentification sera demandé.';
   setAuthError('');
   authBusy(false);
 }
@@ -2562,7 +2708,9 @@ function showAuthScreen() {
   document.body.classList.remove('is-authenticated');
   const screen = $('#auth-screen');
   if (screen) screen.hidden = false;
+  pendingAuth = null;
   setAuthMode('signin');
+  setAuthStep('login');
   window.setTimeout(() => $('#auth-identifier')?.focus(), 420);
 }
 
@@ -2891,26 +3039,89 @@ function bindAuthUI() {
     if (!supabaseReady()) { setAuthError('Supabase n’est pas configuré.'); return; }
     const identifier = $('#auth-identifier')?.value.trim() || '';
     const password = $('#auth-password')?.value || '';
-    const whatsapp = $('#auth-whatsapp')?.value.trim() || '';
     setAuthError('');
-    if (!identifier) { setAuthError('Entrez votre email ou votre numéro de téléphone.'); return; }
+    if (!identifier) { setAuthError('Entrez votre adresse email.'); return; }
     if (password.length < 6) { setAuthError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
-    if (authMode === 'signup') {
-      try { normalizeWhatsAppNumber(whatsapp); } catch (error) { setAuthError(error.message); return; }
-    }
     authBusy(true);
     try {
-      if (authMode === 'signup') await signUpWithIdentifier(identifier, password, whatsapp);
-      else await signInWithIdentifier(identifier, password);
+      const payload = authMode === 'signup'
+        ? await signUpWithIdentifier(identifier, password)
+        : null;
+      const challenge = payload
+        ? await prepareMfaChallenge(payload, identifier)
+        : await beginPasswordSignIn(identifier, password);
+      pendingAuth = challenge;
       const passwordInput = $('#auth-password');
       if (passwordInput) passwordInput.value = '';
-      await startApp();
-      toast(authMode === 'signup' ? 'Compte créé · synchronisation activée.' : 'Connexion réussie.');
+      showTotpStep(challenge);
+      toast(challenge.mode === 'enroll'
+        ? 'Scannez le QR code pour activer la double authentification.'
+        : 'Saisissez le code de votre application d’authentification.');
     } catch (error) {
       setAuthError(friendlyAuthError(error));
     } finally {
       authBusy(false);
     }
+  });
+  $('#auth-totp-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!pendingAuth) {
+      setAuthStep('login');
+      setAuthError('Votre session a expiré. Reconnectez-vous.');
+      return;
+    }
+    const code = ($('#auth-totp-code')?.value || '').replace(/\D/g, '');
+    setTotpError('');
+    if (code.length !== 6) { setTotpError('Entrez le code à 6 chiffres affiché par votre application.'); return; }
+    totpBusy(true);
+    try {
+      const payload = await verifyTotpCode(
+        pendingAuth.factorId,
+        pendingAuth.challengeId,
+        code,
+        pendingAuth.passwordPayload.access_token,
+      );
+      if (!payload?.access_token) throw new Error('Code incorrect.');
+      pendingAuth = null;
+      storeSession(payload);
+      await upsertProfile();
+      setAuthStep('login');
+      await startApp();
+      toast('Double authentification validée · bienvenue.');
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      if (/challenge.*(expired|not found)|invalid.*challenge/i.test(message)) {
+        try {
+          pendingAuth.challengeId = await createTotpChallenge(
+            pendingAuth.factorId,
+            pendingAuth.passwordPayload.access_token,
+          );
+        } catch (refreshError) {
+          console.warn('Nouveau défi TOTP impossible', refreshError);
+        }
+      }
+      setTotpError(friendlyTotpError(error));
+      $('#auth-totp-code')?.select();
+    } finally {
+      totpBusy(false);
+    }
+  });
+  $('#auth-totp-back')?.addEventListener('click', () => {
+    if (pendingAuth?.mode === 'enroll' && pendingAuth.factorId) {
+      authRequest(`/auth/v1/factors/${encodeURIComponent(pendingAuth.factorId)}`, {
+        method: 'DELETE',
+        token: pendingAuth.passwordPayload.access_token,
+      }).catch(() => {});
+    }
+    pendingAuth = null;
+    setAuthStep('login');
+    setAuthError('');
+    $('#auth-password')?.focus();
+  });
+  $('#auth-totp-code')?.addEventListener('input', (event) => {
+    const input = event.target;
+    const digits = input.value.replace(/\D/g, '').slice(0, 6);
+    if (input.value !== digits) input.value = digits;
   });
   $('#auth-toggle-password')?.addEventListener('click', () => {
     const input = $('#auth-password');

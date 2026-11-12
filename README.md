@@ -1,6 +1,6 @@
 # Volaille chez TALL — Gestion avicole
 
-Application web progressive (PWA) pour l’élevage et la commercialisation de poulets de chair. Elle fonctionne sur ordinateur, tablette et téléphone. Un compte personnel (email ou téléphone + mot de passe) est obligatoire : bandes, relevés, ventes, charges et paramètres sont enregistrés dans Supabase et **synchronisés sur tous les appareils connectés**.
+Application web progressive (PWA) pour l’élevage et la commercialisation de poulets de chair. Elle fonctionne sur ordinateur, tablette et téléphone. Un compte personnel (adresse email + mot de passe + code d’application d’authentification) est obligatoire : bandes, relevés, ventes, charges et paramètres sont enregistrés dans Supabase et **synchronisés sur tous les appareils connectés**.
 
 ## Application en ligne
 
@@ -31,8 +31,9 @@ Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en c
 
 ### Connexion et synchronisation
 - **Écran d’accueil animé** avec le logo de l’exploitation, avant toute utilisation de l’application.
-- **Inscription** et **connexion** par email **ou** numéro de téléphone, avec mot de passe (6 caractères minimum).
-- À l’inscription, le **numéro WhatsApp du gestionnaire est obligatoire** (format international, ex. `+223 78 31 48 18`). Les numéros locaux maliens à 8 chiffres reçoivent automatiquement l’indicatif `223`.
+- **Inscription** et **connexion** avec une **adresse email** et un mot de passe (6 caractères minimum).
+- **Double authentification TOTP** : après validation du mot de passe, l’application demande le **code à 6 chiffres** de l’application d’authentification (Google Authenticator, Authy, Microsoft Authenticator). Au premier accès, un **QR code** et une **clé manuelle** permettent d’enrôler le téléphone ; la session n’est ouverte qu’après validation du code. Aucun email n’est envoyé, donc pas de SMTP à configurer.
+- Le **numéro WhatsApp** n’est plus demandé à l’inscription : il se renseigne ensuite dans **Mon compte** pour recevoir les alertes de commandes.
 - Les données sont stockées sur le compte Supabase : à la reconnexion sur un autre appareil, l’historique complet est retrouvé automatiquement.
 - Bouton **Mon compte** (barre latérale sur ordinateur, avatar du tableau de bord et du bandeau supérieur sur téléphone) : profil, nombre d’enregistrements, synchronisation manuelle, **modification du numéro WhatsApp du gestionnaire**, **changement du mot de passe**, **restauration de l’application** (vide le cache puis resynchronise), **déconnexion** et **suppression définitive du compte** (confirmation par saisie de « SUPPRIMER », effacement des données du compte et du cache local).
 - Un bouton **Se déconnecter** est également disponible directement dans la barre latérale.
@@ -145,10 +146,11 @@ POULET/
 3. Exécuter `supabase/pwa-whatsapp.sql` (colonnes `profiles.whatsapp` et `app_config.manager_whatsapp`).
 4. Exécuter `supabase/pwa-selling-band.sql` (colonnes `band_id` / `band_name` sur `app_config` et `orders`).
 5. Exécuter `supabase/pwa-account.sql` (fonction `delete_own_account()` pour la suppression du compte depuis **Mon compte**).
-6. Dans **Authentication → Providers → Email**, désactiver **Confirm email** pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
-7. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
-8. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
-9. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
+6. Dans **Authentication → Sign In / Providers → Email**, laisser **Confirm email** désactivé pour que l’inscription ouvre directement la session (ou laisser la confirmation active et demander à l’utilisateur de valider son email).
+7. **Double authentification** : l’API TOTP de Supabase est active par défaut, aucune configuration email/SMTP n’est nécessaire. Au premier accès, chaque compte scanne le QR code affiché avec une application d’authentification. En cas de perte du téléphone, un administrateur peut supprimer le facteur TOTP depuis **Authentication → Users → (utilisateur) → Factors** dans Supabase.
+8. Renseigner l’URL du projet et la clé **publishable / anon** dans `supabase-config.js`.
+9. Dans l’application, créer un compte puis ouvrir **Mes Commandes**, activer **Mise en vente** et choisir la bande à vendre pour rendre le stock visible sur la page publique.
+10. Vérifier le numéro d’alerte dans **Mon compte → Numéro WhatsApp du gestionnaire**, puis **Enregistrer le numéro**.
 
 ## Installer
 
@@ -168,4 +170,5 @@ Après chaque modification de `app.js`, `styles.css`, `index.html` ou des icône
 - Les ventes portent sur des poulets vivants ; aucun abattoir, lot transformé, SMS/WhatsApp ou Mobile Money n’est connecté.
 - **WhatsApp** : l’application ouvre WhatsApp avec un message prérempli (`wa.me`) ; l’envoi reste manuel et nécessite que le numéro soit joignable sur WhatsApp. L’ouverture automatique après une commande peut être bloquée par le navigateur : le bouton d’envoi reste alors disponible.
 - Les reçus sont générés localement au format PDF 80 mm ; ils ne sont pas envoyés automatiquement, mais téléchargeables pour impression ou partage.
-- Les données sont synchronisées avec Supabase : conservez l’accès à votre compte (email/téléphone et mot de passe) pour les retrouver sur un nouvel appareil.
+- Les données sont synchronisées avec Supabase : conservez l’accès à votre compte (adresse email et mot de passe) pour les retrouver sur un nouvel appareil.
+- **Double authentification TOTP** : le code provient de l’application d’authentification du téléphone. Si le téléphone est perdu, la connexion reste possible après suppression du facteur TOTP par un administrateur dans Supabase ; il n’existe pas encore de codes de secours dans l’application.

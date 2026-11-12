@@ -47,19 +47,14 @@
           <h1>Volaille chez TALL</h1>
           <p class="auth-tagline">Vos bandes, vos ventes et vos charges, toujours avec vous.</p>
         </div>
-        <div class="auth-tabs" role="tablist" aria-label="Connexion ou création de compte">
+        <div class="auth-tabs" role="tablist" aria-label="Connexion ou création de compte" data-auth-step="login">
           <button class="auth-tab active" type="button" role="tab" aria-selected="true" data-auth-tab="signin">Connexion</button>
           <button class="auth-tab" type="button" role="tab" aria-selected="false" data-auth-tab="signup">Créer un compte</button>
         </div>
-        <form class="auth-form" id="auth-form" novalidate>
+        <form class="auth-form" id="auth-form" data-auth-step="login" onsubmit="return false" novalidate>
           <div class="auth-field">
-            <label for="auth-identifier">Email ou téléphone</label>
-            <input id="auth-identifier" name="identifier" type="text" inputmode="email" autocomplete="username" placeholder="vous@exemple.com ou 78 00 00 00" required />
-          </div>
-          <div class="auth-field" data-signup-only hidden>
-            <label for="auth-whatsapp">Numéro WhatsApp *</label>
-            <input id="auth-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="+223 78 31 48 18" aria-describedby="auth-whatsapp-hint" />
-            <small class="auth-field-hint" id="auth-whatsapp-hint">Format international requis. Les commandes seront envoyées à ce numéro.</small>
+            <label for="auth-identifier">Adresse email</label>
+            <input id="auth-identifier" name="identifier" type="email" inputmode="email" autocomplete="username" placeholder="vous@exemple.com" required />
           </div>
           <div class="auth-field">
             <label for="auth-password">Mot de passe</label>
@@ -73,7 +68,34 @@
             <span class="auth-spinner" id="auth-spinner" hidden aria-hidden="true"></span>
             <span id="auth-submit-label">Se connecter</span>
           </button>
-          <p class="auth-hint" id="auth-hint">Retrouvez vos bandes, ventes et charges sur ordinateur comme sur téléphone.</p>
+          <p class="auth-hint" id="auth-hint">Un code à 6 chiffres de votre application d’authentification sera demandé.</p>
+        </form>
+        <form class="auth-form auth-totp-form" id="auth-totp-form" onsubmit="return false" hidden novalidate>
+          <div class="auth-totp-head">
+            <span class="auth-totp-badge" aria-hidden="true">🔐</span>
+            <div>
+              <strong id="auth-totp-title">Double authentification</strong>
+              <p id="auth-totp-text">Saisissez le code à 6 chiffres affiché par votre application d’authentification.</p>
+            </div>
+          </div>
+          <div class="auth-totp-enroll" id="auth-totp-enroll" hidden>
+            <img id="auth-totp-qr" alt="QR code à scanner avec votre application d’authentification" width="180" height="180" />
+            <p class="auth-totp-secret">Clé manuelle : <code id="auth-totp-secret"></code></p>
+            <p class="auth-totp-help">Ouvrez Google Authenticator, Authy ou Microsoft Authenticator, scannez le QR code, puis saisissez le code généré.</p>
+          </div>
+          <div class="auth-field">
+            <label for="auth-totp-code">Code à 6 chiffres</label>
+            <input id="auth-totp-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required />
+          </div>
+          <p class="auth-error" id="auth-totp-error" role="alert" hidden></p>
+          <button class="auth-submit" id="auth-totp-submit" type="submit">
+            <span class="auth-spinner" id="auth-totp-spinner" hidden aria-hidden="true"></span>
+            <span id="auth-totp-submit-label">Vérifier et se connecter</span>
+          </button>
+          <div class="auth-totp-links">
+            <button class="auth-link" type="button" id="auth-totp-back">Revenir à la connexion</button>
+          </div>
+          <p class="auth-hint">Le code change toutes les 30 secondes. Gardez votre application d’authentification accessible.</p>
         </form>
         <p class="auth-foot">Données privées et sécurisées · synchronisation automatique</p>
       </main>
