@@ -640,3 +640,13 @@ body.is-authenticated .auth-screen { display: none; }
   .ios-install { bottom: calc(74px + env(safe-area-inset-bottom)); }
 }
 
+/* ---------- Interrupteur de mise en vente et déconnexion ---------- */
+.sidebar-logout { width: 100%; min-height: 34px; margin-top: 8px; font-size: 10px; }
+.selling-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; margin: 0 4px; }
+.selling-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track { width: 38px; height: 22px; border-radius: 999px; background: #d7ded8; position: relative; transition: background .18s; flex: 0 0 38px; }
+.switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .18s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.selling-switch input:checked + .switch-track { background: var(--green-700); }
+.selling-switch input:checked + .switch-track::after { transform: translateX(16px); }
+.switch-label { font-size: 10px; font-weight: 700; color: #56635b; }
+

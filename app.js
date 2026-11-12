@@ -1662,6 +1662,116 @@ async function loadOrders({ force = false } = {}) {
   return ordersState.orders;
 }
 
+async function publishSellingStock({ heads, min, max }) {
+  if (!supabaseReady()) throw new Error('Supabase n’est pas configuré.');
+  const payload = {
+    stock_heads: Math.max(0, Number(heads) || 0),
+    min_price: Math.min(25000, Math.max(2500, Number(min) || 2500)),
+    max_price: Math.min(25000, Math.max(2500, Number(max) || 25000)),
+    updated_at: new Date().toISOString(),
+  };
+  if (payload.min_price > payload.max_price) {
+    const swap = payload.min_price;
+    payload.min_price = payload.max_price;
+    payload.max_price = swap;
+  }
+  await supabaseRequest('/rest/v1/app_config?id=eq.1', {
+    method: 'PATCH', body: payload, headers: { Prefer: 'return=minimal' },
+  });
+  ordersState.publicStock = { ...(ordersState.publicStock || {}), ...payload, id: 1 };
+}
+
+async function openSellingModal() {
+  const snapshot = await getSnapshot();
+  const liveStock = sum(snapshot.bands.filter(isOpenBand), (band) => activeBirds(band, snapshot));
+  const current = ordersState.publicStock || {};
+  const currentHeads = Math.max(0, Number(current.stock_heads) || 0) || liveStock;
+  const currentMin = Number(current.min_price) || 2500;
+  const currentMax = Number(current.max_price) || 25000;
+  const fixed = currentMin === currentMax;
+  let submitted = false;
+  setDialog('Mise en vente', 'Définissez les têtes et le prix proposés aux clients sur la page publique.', `
+    <form class="dialog-form" id="selling-form"><div class="form-grid">
+      <div class="field full"><label for="selling-heads">Nombre de têtes destinées à la vente *</label>
+        <input id="selling-heads" name="heads" type="number" inputmode="numeric" min="1" step="1" required value="${esc(currentHeads)}" />
+        <small class="field-hint">Stock disponible dans l’élevage : ${number(liveStock)} tête${liveStock > 1 ? 's' : ''}.</small></div>
+      <div class="field full"><label for="selling-mode">Mode de prix</label>
+        <select id="selling-mode" name="mode">
+          <option value="fixed" ${fixed ? 'selected' : ''}>Prix fixe par tête</option>
+          <option value="range" ${!fixed ? 'selected' : ''}>Intervalle de prix</option>
+        </select></div>
+      <div class="field" data-selling-fixed><label for="selling-price">Prix par tête (FCFA) *</label>
+        <input id="selling-price" name="price" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(fixed ? currentMin : currentMin)}" /></div>
+      <div class="field" data-selling-min hidden><label for="selling-min">Prix minimum (FCFA) *</label>
+        <input id="selling-min" name="min" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(currentMin)}" /></div>
+      <div class="field" data-selling-max hidden><label for="selling-max">Prix maximum (FCFA) *</label>
+        <input id="selling-max" name="max" type="number" inputmode="numeric" min="2500" max="25000" step="1" required value="${esc(currentMax)}" /></div>
+    </div><div class="dialog-actions">
+      <button class="secondary-button" type="button" data-action="cancel-selling">Annuler</button>
+      <button class="primary-button" type="submit">Mettre en vente</button>
+    </div></form>`);
+  const mode = $('#selling-mode');
+  const updateMode = () => {
+    const isRange = mode.value === 'range';
+    const fixedNode = $('[data-selling-fixed]');
+    const minNode = $('[data-selling-min]');
+    const maxNode = $('[data-selling-max]');
+    if (fixedNode) fixedNode.hidden = isRange;
+    if (minNode) minNode.hidden = !isRange;
+    if (maxNode) maxNode.hidden = !isRange;
+  };
+  mode.addEventListener('change', updateMode);
+  updateMode();
+  $('#selling-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const heads = Number($('#selling-heads')?.value) || 0;
+    const isRange = $('#selling-mode')?.value === 'range';
+    let min, max;
+    if (isRange) { min = Number($('#selling-min')?.value) || 0; max = Number($('#selling-max')?.value) || 0; }
+    else { min = max = Number($('#selling-price')?.value) || 0; }
+    if (heads < 1) { toast('Indiquez un nombre de têtes valide.', true); return; }
+    if (min < 2500 || max > 25000 || min > max) { toast('Prix invalide : 2 500 à 25 000 FCFA, minimum ≤ maximum.', true); return; }
+    const button = event.target.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      await publishSellingStock({ heads, min, max });
+      submitted = true;
+      closeDialog();
+      toast(`Mise en vente activée : ${number(heads)} tête${heads > 1 ? 's' : ''} à ${isRange ? `${currency(min)} – ${currency(max)}` : currency(min)}.`);
+      await render();
+    } catch (error) {
+      toast(error?.message || 'Publication impossible.', true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+  const dialog = $('#app-dialog');
+  const onClose = () => {
+    if (!submitted) {
+      const sw = $('#selling-switch');
+      if (sw) sw.checked = false;
+    }
+    dialog.removeEventListener('close', onClose);
+  };
+  dialog.addEventListener('close', onClose);
+}
+
+async function stopSelling() {
+  const sw = $('#selling-switch');
+  if (!confirm('Désactiver la mise en vente publique ? Le stock affiché passera à 0.')) {
+    if (sw) sw.checked = true;
+    return;
+  }
+  try {
+    const current = ordersState.publicStock || {};
+    await publishSellingStock({ heads: 0, min: Number(current.min_price) || 2500, max: Number(current.max_price) || 25000 });
+    toast('Mise en vente désactivée.');
+    await render();
+  } catch (error) {
+    toast(error?.message || 'Impossible de désactiver la mise en vente.', true);
+    if (sw) sw.checked = true;
+  }
+}
 async function publishStock({ silent = false } = {}) {
   if (!supabaseReady()) {
     if (!silent) toast('Supabase n’est pas configuré.', true);
@@ -2115,6 +2225,11 @@ async function renderOrders(snapshot) {
   }).join('');
   const actions = `<button class="secondary-button" type="button" data-action="copy-order-link">Copier le lien public</button>
     <a class="secondary-button" href="./commander.html" target="_blank" rel="noopener">Ouvrir la page</a>
+    <label class="selling-switch" title="Activer ou désactiver la mise en vente publique">
+      <input type="checkbox" id="selling-switch" ${publicStock && Number(publicStock.stock_heads) > 0 ? 'checked' : ''} />
+      <span class="switch-track" aria-hidden="true"></span>
+      <span class="switch-label">Mise en vente</span>
+    </label>
     <button class="secondary-button" type="button" data-action="publish-stock">Publier le stock</button>
     <button class="primary-button" type="button" data-action="refresh-orders">Actualiser</button>`;
   return `${header(actions)}
@@ -2380,6 +2495,7 @@ async function handleAction(action, button = null) {
   else if (action === 'new-charge') await openChargeForm();
   else if (action === 'refresh-orders') { await loadOrders({ force: true }).catch((error) => toast(error.message, true)); await render(); }
   else if (action === 'publish-stock') await publishStock();
+  else if (action === 'cancel-selling') { const sw = $('#selling-switch'); if (sw) sw.checked = false; closeDialog(); }
   else if (action === 'copy-order-link') await copyOrderLink();
   else if (action === 'empty-trash') await emptyTrash();
   else if (action === 'validate-order') { if (button?.dataset?.orderId) await validateOrder(button.dataset.orderId, button); }
@@ -2480,6 +2596,15 @@ async function main() {
       updateSalesSelection();
     } else if (target.matches('[data-sale-check]')) {
       updateSalesSelection();
+    } else if (target.id === 'selling-switch') {
+      if (target.checked) {
+        openSellingModal().catch((error) => {
+          target.checked = false;
+          toast(error?.message || 'Impossible d’activer la mise en vente.', true);
+        });
+      } else {
+        stopSelling();
+      }
     }
   });
   $('#dialog-content').addEventListener('submit', (event) => {

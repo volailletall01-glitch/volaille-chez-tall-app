@@ -35,6 +35,7 @@ Ouvrez ensuite `http://localhost:8080`. Le service worker met l’interface en c
 - À l’inscription, le **numéro WhatsApp du gestionnaire est obligatoire** (format international, ex. `+223 78 31 48 18`). Les numéros locaux maliens à 8 chiffres reçoivent automatiquement l’indicatif `223`.
 - Les données sont stockées sur le compte Supabase : à la reconnexion sur un autre appareil, l’historique complet est retrouvé automatiquement.
 - Bouton **Mon compte** (en bas de la barre latérale) : profil, nombre d’enregistrements, synchronisation manuelle, **modification du numéro WhatsApp du gestionnaire** et déconnexion.
+- Un bouton **Se déconnecter** est également disponible directement dans la barre latérale.
 - Le numéro WhatsApp est publié dans `app_config` afin que la page publique de commande puisse alerter le gestionnaire, même sans compte connecté.
 
 ### Vue d’ensemble
@@ -75,7 +76,7 @@ Un relevé par bande et par date, limité à l’essentiel :
 - **Alerte gestionnaire** : dès l’envoi, la page publique propose (et tente d’ouvrir automatiquement) un message WhatsApp prérempli vers le numéro du gestionnaire, avec le nom, le téléphone, le quartier, la quantité, le prix et le total estimé.
 - En bas de la page, un grand bandeau suit la commande : « Commande en traitement — veuillez patienter ou revenir plus tard pour vérifier l’état de votre commande ». Dès que le gérant valide, il devient un message de confirmation et de remerciement (et un message d’excuse si la commande est refusée). Le suivi reste visible si le client revient plus tard sur le même appareil.
 - Côté gérant : liste des demandes avec les détails du client, bouton **Valider** (la commande bascule automatiquement dans les ventes, la quantité est déduite du stock de l’élevage et le stock public est réactualisé) et bouton **Refuser** (la commande part dans la **Corbeille**, sans impact sur le stock).
-- **Après validation ou refus**, une boîte de dialogue s’affiche aussitôt : statut, articles, quantités, total payé, solde restant, message WhatsApp modifiable à envoyer au client, et **Télécharger le reçu** PDF (le refus génère un justificatif « Commande refusée » avec montants à zéro).
+- **Mise en vente (Espace Gérant)** : un interrupteur « Mise en vente » permet d’activer ou de désactiver la vente publique. À l’activation, une fenêtre demande le nombre de têtes destinées à la vente et le prix par tête, en prix fixe ou en intervalle (min–max), dans la fourchette 2 500 – 25 000 FCFA. Ces informations sont publiées pour les clients ; la désactivation remet le stock affiché à 0.
 - **Corbeille** : les commandes refusées y restent 72 heures (compte à rebours affiché), puis sont purgées automatiquement. Un bouton **Restaurer** remet une commande refusée en attente (elle redevient traitable et le bandeau du client repasse à « Commande en traitement ») ; un autre bouton permet de vider la corbeille immédiatement.
 - Les commandes sont stockées dans Supabase ; l’onglet **Mes Commandes** s’ouvre directement, sans écran de connexion ni mot de passe.
 
