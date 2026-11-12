@@ -651,7 +651,7 @@ body.is-authenticated .auth-screen { display: none; }
   .mobile-logout { display: inline-flex; }
 
 @media (max-width: 760px) {
-  .mobile-dashboard { display: block; }
+  .page-dashboard .topbar { display: none; }
   .band-kpi-list,
   .band-chart-panel,
   .mobile-pending-orders,

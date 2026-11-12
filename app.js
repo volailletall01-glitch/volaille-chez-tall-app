@@ -1591,6 +1591,7 @@ async function render() {
 async function setPage(page, { pushHistory = false, focusTab = false, scrollToTop = false } = {}) {
   if (!Object.prototype.hasOwnProperty.call(PAGE_LABELS, page)) return;
   currentPage = page;
+  document.body.classList.toggle('page-dashboard', page === 'dashboard');
   if (page !== 'dashboard') stopMobileBandRotation();
   if (pushHistory && location.hash !== `#${page}`) history.pushState({ page }, '', `#${page}`);
   $$('.nav-item[role="tab"]').forEach((tab) => {
