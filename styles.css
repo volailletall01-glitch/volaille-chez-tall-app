@@ -190,7 +190,13 @@ tbody tr:hover { background: #fcfdfc; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  .sidebar { width: auto; height: calc(60px + env(safe-area-inset-bottom)); inset: auto 0 0 0; flex-direction: row; overflow: hidden; padding: 0 7px env(safe-area-inset-bottom); border-top: 1px solid var(--line); border-right: 0; background: rgba(255,255,255,.97); }
+  .nav-item[data-page="daily"],
+  .nav-item[data-page="sales"],
+  .nav-item[data-page="annual"] { display: none; }
+  .nav-item[data-page="dashboard"] { order: 1; }
+  .nav-item[data-page="orders"] { order: 2; }
+  .nav-item[data-page="expenses"] { order: 3; }
+  .nav-item[data-page="bands"] { order: 4; }
   .brand, .nav-caption, .sidebar-bottom { display: none; }
   .nav-list { width: 100%; min-width: 0; display: flex; justify-content: space-between; gap: 0; }
   .nav-item { width: auto; min-width: 0; min-height: 52px; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 1px; border-radius: 7px; font-size: 8px; }
