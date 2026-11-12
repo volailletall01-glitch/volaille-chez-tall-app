@@ -1619,7 +1619,7 @@ async function openCreditsDialog() {
       ${outstanding.map((sale) => {
         const due = Number(sale.total_amount) - Number(sale.paid_amount);
         return `<div class="cost-preview" style="display:block;margin-bottom:10px">
-          <div><strong>${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
+          <div><strong>${icon('person')} ${esc(sale.client_name || 'Vente comptoir')}</strong> — ${dateLabel(sale.sale_date)}</div>
           <div>Reste à payer : ${currency(due)}</div>
           <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
             <input type="number" min="0" step="1" max="${due}" placeholder="Montant payé" data-credit-input="${esc(sale.id)}" style="flex:1;padding:6px" />
@@ -1680,7 +1680,7 @@ async function openBandDetail(bandId) {
       <h3>Relevés (${logs.length})</h3>
       ${logs.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Mortalité</th><th>Tri</th><th>Note</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${logs.map((log) => `<tr><td>${dateLabel(log.log_date)}</td><td>${number(log.mortality)}</td><td>${number(log.culls)}</td><td>${esc(log.note || '—')}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-log" data-log-id="${esc(log.id)}" title="Supprimer ce relevé">${icon('trash')}</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucun relevé.</p>'}
       <h3>Ventes (${sales.length})</h3>
-      ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
+      ${sales.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Sujets</th><th>Montant</th></tr></thead><tbody>${sales.map((sale) => `<tr><td>${dateLabel(sale.sale_date)}</td><td><span class="client-identity-icon" aria-hidden="true" style="display:inline-grid;place-items:center;vertical-align:middle;width:20px;height:20px;border-radius:6px;margin-right:6px">${icon('person')}</span>${esc(sale.client_name || 'Vente comptoir')}</td><td>${number(sale.heads)}</td><td>${currency(sale.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : '<p>Aucune vente.</p>'}
       <h3>Charges (${charges.length})</h3>
       ${charges.length ? `<div class="table-wrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Montant</th>${archived ? '' : '<th>Actions</th>'}</tr></thead><tbody>${charges.map((charge) => `<tr><td>${dateLabel(charge.charge_date)}</td><td>${esc(charge.description)}</td><td>${currency(charge.amount)}</td>${archived ? '' : `<td><button class="icon-button danger-button" type="button" data-action="delete-charge" data-charge-id="${esc(charge.id)}" title="Supprimer cette charge">${icon('trash')}</button></td>`}</tr>`).join('')}</tbody></table></div>` : '<p>Aucune charge.</p>'}
       <div class="dialog-actions">
