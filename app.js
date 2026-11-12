@@ -683,6 +683,10 @@ function toast(message, error = false) {
 
 function setDialog(title, subtitle, body) {
   const dialog = $('#app-dialog');
+  if (dialog.open) {
+    dialog.close();
+    $('#dialog-content').replaceChildren();
+  }
   $('#dialog-content').innerHTML = `
     <div class="dialog-head"><div><h2 id="dialog-title">${esc(title)}</h2><p>${esc(subtitle)}</p></div>
       <button class="dialog-close" type="button" aria-label="Fermer" data-close-dialog>×</button></div>
@@ -2351,11 +2355,67 @@ async function openAccountDialog() {
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="secondary-button" type="button" data-action="sync-now">Synchroniser</button>
           <button class="primary-button" type="button" data-action="save-whatsapp">Enregistrer le numéro</button>
+          <button class="secondary-button" type="button" data-action="change-password">Changer le mot de passe</button>
+          <button class="secondary-button" type="button" data-action="restore-app">Restaurer l’application</button>
           <button class="secondary-button" type="button" data-close-dialog>Fermer</button>
         </div>
       </div>
     </div>`;
   setDialog('Mon compte', 'Synchronisation multi-appareils sécurisée.', body);
+}
+
+async function openChangePasswordDialog() {
+  if (!session) return;
+  setDialog('Changer le mot de passe', 'Choisissez un nouveau mot de passe d’au moins 6 caractères.', `
+    <form class="dialog-form" id="password-form"><div class="form-grid">
+      <div class="field full"><label for="new-password">Nouveau mot de passe *</label>
+        <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="6" required placeholder="6 caractères minimum" /></div>
+      <div class="field full"><label for="confirm-password">Confirmer le mot de passe *</label>
+        <input id="confirm-password" name="confirm" type="password" autocomplete="new-password" minlength="6" required placeholder="Répétez le mot de passe" /></div>
+    </div><div class="dialog-actions">
+      <button class="secondary-button" type="button" data-close-dialog>Annuler</button>
+      <button class="primary-button" type="submit">Enregistrer</button>
+    </div></form>`);
+  $('#password-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const password = $('#new-password')?.value || '';
+    const confirm = $('#confirm-password')?.value || '';
+    if (password.length < 6) { toast('Le mot de passe doit contenir au moins 6 caractères.', true); return; }
+    if (password !== confirm) { toast('Les deux mots de passe ne correspondent pas.', true); return; }
+    const button = event.target.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      await authRequest('/auth/v1/user', {
+        method: 'PUT',
+        token: session.access_token,
+        body: { password },
+      });
+      closeDialog();
+      toast('Mot de passe modifié avec succès.');
+    } catch (error) {
+      toast(error?.message || 'Impossible de modifier le mot de passe.', true);
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+}
+
+async function restoreApp() {
+  if (!confirm('Restaurer l’application et recharger tout le travail ?\\n\\nLe cache local sera vidé et les données resynchronisées avec votre compte.')) return;
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    toast('Application restaurée. Rechargement…');
+    window.setTimeout(() => location.reload(), 900);
+  } catch (error) {
+    toast(error?.message || 'Restauration impossible.', true);
+  }
 }
 
 async function saveAccountWhatsApp(button) {
@@ -2503,6 +2563,8 @@ async function handleAction(action, button = null) {
   else if (action === 'restore-order') { if (button?.dataset?.orderId) await restoreOrder(button.dataset.orderId, button); }
   else if (action === 'account' || action === 'settings') await openAccountDialog();
   else if (action === 'save-whatsapp') await saveAccountWhatsApp(button);
+  else if (action === 'change-password') await openChangePasswordDialog();
+  else if (action === 'restore-app') await restoreApp();
   else if (action === 'sync-now') await syncNow().catch((error) => toast(error.message || 'Synchronisation impossible.', true));
   else if (action === 'logout') await logout();
 }
