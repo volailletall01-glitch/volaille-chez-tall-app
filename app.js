@@ -948,12 +948,12 @@ async function renderDashboard(snapshot) {
       </div>
       <div class="mobile-bands-row">
         <div class="mobile-band-card">
-          <span class="mobile-band-title">Bande · <span class="mobile-band-name">nom de la bande</span></span>
-          <span class="mobile-band-stock">Disponible : <strong class="mobile-band-stock-val">0</strong></span>
+          <span class="mobile-band-title">BANDE « <span class="mobile-band-name">nom de la bande</span> »</span>
+          <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
         </div>
         <div class="mobile-band-card">
-          <span class="mobile-band-title">Bande · <span class="mobile-band-name">nom de la bande</span></span>
-          <span class="mobile-band-stock">Disponible : <strong class="mobile-band-stock-val">0</strong></span>
+          <span class="mobile-band-title">VENTES « <span class="mobile-band-name">nom de la bande</span> »</span>
+          <span class="mobile-band-sales">VENDUS : <strong class="mobile-band-sales-val">0</strong></span>
         </div>
         <div class="mobile-tools-col">
           <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">${icon('daily')}</span> Suivi quotidien</button>
@@ -1023,9 +1023,7 @@ function updateMobileBandDisplay(bands) {
   if (!bands || !bands.length) return;
   const snap = window.snapshot || {};
   const i = mobileBandIndex % bands.length;
-  const j = (mobileBandIndex + 1) % bands.length;
   const a = bands[i];
-  const b = bands[j];
   const costA = bandCost(a, snap);
   const revA = bandRevenue(a, snap);
   document.querySelectorAll('.mobile-kpi-band').forEach((node) => { node.textContent = a.name; });
@@ -1035,10 +1033,13 @@ function updateMobileBandDisplay(bands) {
   if (prof) prof.textContent = currency(revA - costA);
   const names = document.querySelectorAll('.mobile-band-name');
   if (names[0]) names[0].textContent = a.name;
-  if (names[1]) names[1].textContent = b.name;
-  const stocks = document.querySelectorAll('.mobile-band-stock-val');
-  if (stocks[0]) stocks[0].textContent = number(activeBirds(a, snap));
-  if (stocks[1]) stocks[1].textContent = number(activeBirds(b, snap));
+  if (names[1]) names[1].textContent = a.name;
+  const stocks = document.querySelector('.mobile-band-stock-val');
+  if (stocks) stocks.textContent = number(activeBirds(a, snap));
+  const salesForBand = (snap.sales || []).filter((sale) => sale.batch_id === a.id);
+  const soldHeads = sum(salesForBand, (sale) => Number(sale.heads) || 0);
+  const salesVal = document.querySelector('.mobile-band-sales-val');
+  if (salesVal) salesVal.textContent = number(soldHeads);
 }
 
 function startMobileBandRotation(bands) {
