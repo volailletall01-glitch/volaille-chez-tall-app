@@ -642,6 +642,7 @@ body.is-authenticated .auth-screen { display: none; }
 
 /* ---------- Interrupteur de mise en vente et déconnexion ---------- */
 .mobile-logout { display: none; }
+.mobile-dashboard { display: none; }
 
 @media (max-width: 760px) {
   .mobile-logout { display: inline-flex; }
