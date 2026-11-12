@@ -743,9 +743,11 @@ function bandRevenue(band, snapshot) {
   return sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.total_amount);
 }
 
-function renderDashboard(snapshot) {
+async function renderDashboard(snapshot) {
   const bands = visibleBands(snapshot);
   const archivedCount = snapshot.bands.length - bands.length;
+  let pendingOrders = 0;
+  try { await loadOrders({ force: true }); pendingOrders = ordersState.orders.filter((o) => o.status === 'en_attente').length; } catch { /* hors ligne */ }
   const heading = `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole, bande par bande.</p></div></div>`;
 
   if (!bands.length) {
@@ -768,7 +770,7 @@ function renderDashboard(snapshot) {
         <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Clôturée' : 'En cours'}</span>
       </header>
       <div class="band-kpi-grid">
-        <div><span>Sujets en élevage</span><strong>${number(birds)}</strong></div>
+        <div><span>Disponible</span><strong>${number(birds)}</strong></div>
         <div><span>Mortalité cumulée</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
         <div><span>Chiffre d’affaires</span><strong>${currency(revenue)}</strong></div>
         <div><span>Dépenses</span><strong>${currency(costs)}</strong></div>
@@ -789,11 +791,26 @@ function renderDashboard(snapshot) {
     : '<p class="band-chart-empty">Aucune vente enregistrée pour le moment : les barres apparaîtront dès la première vente.</p>';
 
   return `${heading}
+    <section class="mobile-pending-orders" aria-label="Commandes en attente">
+      <span class="mobile-pending-count">${number(pendingOrders)}</span>
+      <span class="mobile-pending-label">COMMANDES EN ATTENTES</span>
+    </section>
     <section class="band-kpi-list" aria-label="Indicateurs par bande">${cards}</section>
     ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivée${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
     <section class="panel band-chart-panel">
       <div class="panel-header"><div><h2>Chiffre d’affaires par bande</h2><p>Répartition des recettes enregistrées pour chaque lot.</p></div></div>
       <div class="band-chart">${chart}</div>
+    </section>
+    <section class="mobile-quick-actions" aria-label="Accès rapides">
+      <button class="mobile-action-tile" type="button" data-action="new-sale"><span>VENTES</span></button>
+      <button class="mobile-action-tile" type="button" data-action="new-daily"><span>SUIVI Quotidien</span></button>
+      <button class="mobile-action-tile" type="button" data-page="expenses"><span>Charges</span></button>
+      <button class="mobile-action-tile" type="button" data-page="annual"><span>Statistiques</span></button>
+      <button class="mobile-action-tile" type="button" data-page="bands"><span>BANDES</span></button>
+    </section>
+    <section class="mobile-sales-preview" aria-label="Mes ventes et mes clients">
+      <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="secondary-button" type="button" data-page="sales">voir plus</button></div>
+      <p class="mobile-sales-note">Consultez l’historique complet et les reçus dans l’onglet Ventes.</p>
     </section>`;
 }
 
