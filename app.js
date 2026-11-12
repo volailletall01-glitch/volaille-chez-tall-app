@@ -750,12 +750,13 @@ async function renderDashboard(snapshot) {
   try { await loadOrders({ force: true }); pendingOrders = ordersState.orders.filter((o) => o.status === 'en_attente').length; } catch { /* hors ligne */ }
   const unpaidTotal = sum((snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0), (s) => Number(s.total_amount) - Number(s.paid_amount));
   const unpaidCount = (snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0).length;
-  const heading = `<div class="page-heading dashboard-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le r├®sum├® de votre exploitation avicole, bande par bande.</p></div></div>`;
+  const firstName = (userLabel() || '').split(/\s+/)[0] || 'Awa';
+  const heading = `<div class="page-heading dashboard-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le resume de votre exploitation avicole, bande par bande.</p></div></div>`;
 
   if (!bands.length) {
     return `${heading}
-      ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archiv├®e${archivedCount > 1 ? 's' : ''} : plus aucune op├®ration dans le quotidien, mais lÔÇÖhistorique reste comptabilis├® dans les statistiques annuelles.</p>` : ''}
-      <section class="panel table-panel">${emptyState('Aucune bande active', 'Cr├®ez votre premier lot pour voir appara├«tre ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Cr├®er une bande</button>')}</section>`;
+      ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivee${archivedCount > 1 ? 's' : ''} : plus aucune operation dans le quotidien, mais l'historique reste comptabilise dans les statistiques annuelles.</p>` : ''}
+      <section class="panel table-panel">${emptyState('Aucune bande active', 'Creez votre premier lot pour voir apparaitre ses indicateurs ici.', '<button class="primary-button" data-action="new-band">Creer la premiere bande</button>')}</section>`;
   }
 
   const cards = bands.map((band) => {
@@ -768,15 +769,15 @@ async function renderDashboard(snapshot) {
     const closed = band.status === 'closed';
     return `<article class="band-kpi">
       <header class="band-kpi-head">
-        <div><h3>${esc(band.name)}</h3><p>${esc(band.strain || 'Souche non pr├®cis├®e')} ┬À J${daysSince(band.arrival_date)} / ${Number(band.target_age_days || 42)} j</p></div>
-        <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Cl├┤tur├®e' : 'En cours'}</span>
+        <div><h3>${esc(band.name)}</h3><p>${esc(band.strain || 'Souche non precisee')} · J${daysSince(band.arrival_date)} / ${Number(band.target_age_days || 42)} j</p></div>
+        <span class="status-pill ${closed ? 'neutral' : ''}">${closed ? 'Cloturee' : 'En cours'}</span>
       </header>
       <div class="band-kpi-grid">
         <div><span>Disponible</span><strong>${number(birds)}</strong></div>
-        <div><span>Mortalit├® cumul├®e</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
-        <div><span>Chiffre dÔÇÖaffaires</span><strong>${currency(revenue)}</strong></div>
-        <div><span>D├®penses</span><strong>${currency(costs)}</strong></div>
-        <div class="wide"><span>B├®n├®fice</span><strong class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</strong></div>
+        <div><span>Mortalite cumulee</span><strong class="${rate > 5 ? 'low-stock' : ''}">${number(deaths)} <small>(${number(rate, 1)} %)</small></strong></div>
+        <div><span>Chiffre d'affaires</span><strong>${currency(revenue)}</strong></div>
+        <div><span>Depenses</span><strong>${currency(costs)}</strong></div>
+        <div class="wide"><span>Benefice</span><strong class="${profit >= 0 ? 'positive' : 'low-stock'}">${currency(profit)}</strong></div>
       </div>
     </article>`;
   }).join('');
@@ -784,39 +785,42 @@ async function renderDashboard(snapshot) {
   const maxRevenue = Math.max(0, ...bands.map((band) => bandRevenue(band, snapshot)));
   const chart = maxRevenue > 0
     ? bands.map((band) => {
-      const revenue = bandRevenue(band, snapshot);
-      const width = Math.max(revenue > 0 ? 2 : 0, (revenue / maxRevenue) * 100);
-      return `<div class="band-chart-row"><span class="band-chart-label">${esc(band.name)}</span>
+        const revenue = bandRevenue(band, snapshot);
+        const width = Math.max(revenue > 0 ? 2 : 0, (revenue / maxRevenue) * 100);
+        return `<div class="band-chart-row"><span class="band-chart-label">${esc(band.name)}</span>
         <div class="band-chart-track"><div class="band-chart-bar" style="width:${width.toFixed(1)}%"></div></div>
         <span class="band-chart-value">${currency(revenue)}</span></div>`;
-    }).join('')
-    : '<p class="band-chart-empty">Aucune vente enregistr├®e pour le moment : les barres appara├«tront d├¿s la premi├¿re vente.</p>';
+      }).join('')
+    : '<p class="band-chart-empty">Aucune vente enregistree pour le moment : les barres apparaitront des la premiere vente.</p>';
+
+  const mobileBands = bands.map((band) => ({ name: esc(band.name), expenses: currency(bandCost(band, snapshot)), profit: currency(bandRevenue(band, snapshot) - bandCost(band, snapshot)), stock: number(activeBirds(band, snapshot)) }));
+  startMobileBandRotation(bands);
 
   return `${heading}
-    <section class="mobile-dashboard" data-bands='${esc(JSON.stringify(bands.map((band) => ({ name: esc(band.name), expenses: currency(bandCost(band, snapshot)), profit: currency(bandRevenue(band, snapshot) - bandCost(band, snapshot)), stock: number(activeBirds(band, snapshot)) }))))}' aria-label="Tableau de bord mobile">
+    <section class="mobile-dashboard" data-bands='${esc(JSON.stringify(mobileBands))}' aria-label="Tableau de bord mobile">
       <header class="mobile-dash-header">
         <div class="mobile-dash-brand"><span class="mobile-avatar">AB</span><strong>Accueil</strong></div>
         <div class="mobile-dash-icons">
-          <button class="mobile-icon-btn" type="button" aria-label="Rechercher">­ƒöì</button>
-          <button class="mobile-icon-btn" type="button" aria-label="Notifications">­ƒöö</button>
+          <button class="mobile-icon-btn" type="button" aria-label="Rechercher">&#128269;</button>
+          <button class="mobile-icon-btn" type="button" aria-label="Notifications">&#128276;</button>
         </div>
       </header>
-      <p class="mobile-salutation">Bonjour, ${esc((userLabel() || '').split(/\s+/)[0] || 'Awa')}</p>
+      <p class="mobile-salutation">Bonjour, ${esc(firstName)}</p>
       <div class="mobile-actions">
         <button class="mobile-action-primary" type="button" data-action="new-band">+ NOUVELLE BANDE</button>
         <button class="mobile-action-secondary" type="button" data-action="new-sale">+ VENTES</button>
       </div>
       <div class="mobile-kpi-grid">
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">DEPENSES ┬½ <span class="mobile-kpi-band">NOM BANDE</span> ┬╗</span>
+          <span class="mobile-kpi-label">DEPENSES &#171; <span class="mobile-kpi-band">NOM BANDE</span> &#187;</span>
           <strong class="mobile-kpi-value mobile-kpi-expenses">0 FCFA</strong>
         </div>
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">BENEFICES ┬½ <span class="mobile-kpi-band">NOM BANDE</span> ┬╗</span>
+          <span class="mobile-kpi-label">BENEFICES &#171; <span class="mobile-kpi-band">NOM BANDE</span> &#187;</span>
           <strong class="mobile-kpi-value mobile-kpi-profit">0 FCFA</strong>
         </div>
         <div class="mobile-kpi-card">
-          <span class="mobile-kpi-label">├Ç encaisser</span>
+          <span class="mobile-kpi-label">A encaisser</span>
           <strong class="mobile-kpi-value">${currency(unpaidTotal)}</strong>
           <small>${number(unpaidCount)} en cours</small>
         </div>
@@ -827,42 +831,27 @@ async function renderDashboard(snapshot) {
       </div>
       <div class="mobile-bands-row">
         <div class="mobile-band-card">
-          <span class="mobile-band-title">BANDE ┬½ <span class="mobile-band-name">nom bande</span> ┬╗</span>
+          <span class="mobile-band-title">BANDE &#171; <span class="mobile-band-name">nom bande</span> &#187;</span>
           <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
         </div>
         <div class="mobile-band-card">
-          <span class="mobile-band-title">BANDE ┬½ <span class="mobile-band-name">Nom bande</span> ┬╗</span>
+          <span class="mobile-band-title">BANDE &#171; <span class="mobile-band-name">Nom bande</span> &#187;</span>
           <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
         </div>
         <div class="mobile-tools-col">
-          <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">­ƒôà</span> SUIVI Quotidien</button>
-          <button class="mobile-tool-card" type="button" data-page="annual"><span class="mobile-tool-icon">­ƒôè</span> Statistiques</button>
+          <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">&#128197;</span> SUIVI Quotidien</button>
+          <button class="mobile-tool-card" type="button" data-page="annual"><span class="mobile-tool-icon">&#128202;</span> Statistiques</button>
         </div>
       </div>
       <div class="mobile-sales-preview">
         <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="mobile-link" type="button" data-page="sales">voir plus</button></div>
       </div>
     </section>
-    <section class="mobile-pending-orders" aria-label="Commandes en attente">section class="mobile-pending-orders" aria-label="Commandes en attente">
-      <span class="mobile-pending-count">${number(pendingOrders)}</span>
-      <span class="mobile-pending-label">COMMANDES EN ATTENTES</span>
-    </section>
     <section class="band-kpi-list" aria-label="Indicateurs par bande">${cards}</section>
-    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archiv├®e${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
+    ${archivedCount ? `<p class="archive-note">${number(archivedCount)} bande${archivedCount > 1 ? 's' : ''} archivee${archivedCount > 1 ? 's' : ''} : son historique reste inclus dans les statistiques annuelles.</p>` : ''}
     <section class="panel band-chart-panel">
-      <div class="panel-header"><div><h2>Chiffre dÔÇÖaffaires par bande</h2><p>R├®partition des recettes enregistr├®es pour chaque lot.</p></div></div>
+      <div class="panel-header"><div><h2>Chiffre d'affaires par bande</h2><p>Repartition des recettes enregistrees pour chaque lot.</p></div></div>
       <div class="band-chart">${chart}</div>
-    </section>
-    <section class="mobile-quick-actions" aria-label="Acc├¿s rapides">
-      <button class="mobile-action-tile" type="button" data-action="new-sale"><span>VENTES</span></button>
-      <button class="mobile-action-tile" type="button" data-action="new-daily"><span>SUIVI Quotidien</span></button>
-      <button class="mobile-action-tile" type="button" data-page="expenses"><span>Charges</span></button>
-      <button class="mobile-action-tile" type="button" data-page="annual"><span>Statistiques</span></button>
-      <button class="mobile-action-tile" type="button" data-page="bands"><span>BANDES</span></button>
-    </section>
-    <section class="mobile-sales-preview" aria-label="Mes ventes et mes clients">
-      <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="secondary-button" type="button" data-page="sales">voir plus</button></div>
-      <p class="mobile-sales-note">Consultez lÔÇÖhistorique complet et les re├ºus dans lÔÇÖonglet Ventes.</p>
     </section>`;
 }
 
