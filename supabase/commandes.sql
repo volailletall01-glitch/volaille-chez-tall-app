@@ -93,6 +93,17 @@ create policy "config_update_app" on public.app_config
 revoke all on public.orders from anon;
 grant insert (client_name, client_phone, neighborhood, quantity, price_per_head)
   on public.orders to anon;
+-- Si la migration pwa-selling-band.sql a déjà été exécutée, conserver l'accès
+-- aux colonnes de bande lors d'une ré-exécution de ce script.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'band_id'
+  ) then
+    execute 'grant insert (band_id, band_name) on public.orders to anon';
+  end if;
+end $$;
 grant select, update, delete on public.orders to anon;
 grant select, update, delete on public.orders to authenticated;
 
