@@ -748,7 +748,9 @@ async function renderDashboard(snapshot) {
   const archivedCount = snapshot.bands.length - bands.length;
   let pendingOrders = 0;
   try { await loadOrders({ force: true }); pendingOrders = ordersState.orders.filter((o) => o.status === 'en_attente').length; } catch { /* hors ligne */ }
-  const heading = `<div class="page-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole, bande par bande.</p></div></div>`;
+  const unpaidTotal = sum((snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0), (s) => Number(s.total_amount) - Number(s.paid_amount));
+  const unpaidCount = (snapshot.sales || []).filter((s) => (Number(s.total_amount) - Number(s.paid_amount)) > 0).length;
+  const heading = `<div class="page-heading dashboard-heading"><div><h1>Bonjour, bienvenue</h1><p>Voici le résumé de votre exploitation avicole, bande par bande.</p></div></div>`;
 
   if (!bands.length) {
     return `${heading}
@@ -791,7 +793,57 @@ async function renderDashboard(snapshot) {
     : '<p class="band-chart-empty">Aucune vente enregistrée pour le moment : les barres apparaîtront dès la première vente.</p>';
 
   return `${heading}
-    <section class="mobile-pending-orders" aria-label="Commandes en attente">
+    <section class="mobile-dashboard" data-bands='${esc(JSON.stringify(bands.map((band) => ({ name: esc(band.name), expenses: currency(bandCost(band, snapshot)), profit: currency(bandRevenue(band, snapshot) - bandCost(band, snapshot)), stock: number(activeBirds(band, snapshot)) }))))}' aria-label="Tableau de bord mobile">
+      <header class="mobile-dash-header">
+        <div class="mobile-dash-brand"><span class="mobile-avatar">AB</span><strong>Accueil</strong></div>
+        <div class="mobile-dash-icons">
+          <button class="mobile-icon-btn" type="button" aria-label="Rechercher">🔍</button>
+          <button class="mobile-icon-btn" type="button" aria-label="Notifications">🔔</button>
+        </div>
+      </header>
+      <p class="mobile-salutation">Bonjour, ${esc((userLabel() || '').split(/\s+/)[0] || 'Awa')}</p>
+      <div class="mobile-actions">
+        <button class="mobile-action-primary" type="button" data-action="new-band">+ NOUVELLE BANDE</button>
+        <button class="mobile-action-secondary" type="button" data-action="new-sale">+ VENTES</button>
+      </div>
+      <div class="mobile-kpi-grid">
+        <div class="mobile-kpi-card">
+          <span class="mobile-kpi-label">DEPENSES « <span class="mobile-kpi-band">NOM BANDE</span> »</span>
+          <strong class="mobile-kpi-value mobile-kpi-expenses">0 FCFA</strong>
+        </div>
+        <div class="mobile-kpi-card">
+          <span class="mobile-kpi-label">BENEFICES « <span class="mobile-kpi-band">NOM BANDE</span> »</span>
+          <strong class="mobile-kpi-value mobile-kpi-profit">0 FCFA</strong>
+        </div>
+        <div class="mobile-kpi-card">
+          <span class="mobile-kpi-label">À encaisser</span>
+          <strong class="mobile-kpi-value">${currency(unpaidTotal)}</strong>
+          <small>${number(unpaidCount)} en cours</small>
+        </div>
+        <div class="mobile-kpi-card">
+          <span class="mobile-kpi-label">COMMANDES EN ATTENTES</span>
+          <strong class="mobile-kpi-value">${number(pendingOrders)}</strong>
+        </div>
+      </div>
+      <div class="mobile-bands-row">
+        <div class="mobile-band-card">
+          <span class="mobile-band-title">BANDE « <span class="mobile-band-name">nom bande</span> »</span>
+          <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
+        </div>
+        <div class="mobile-band-card">
+          <span class="mobile-band-title">BANDE « <span class="mobile-band-name">Nom bande</span> »</span>
+          <span class="mobile-band-stock">DISPONIBLE : <strong class="mobile-band-stock-val">0</strong></span>
+        </div>
+        <div class="mobile-tools-col">
+          <button class="mobile-tool-card" type="button" data-action="new-daily"><span class="mobile-tool-icon">📅</span> SUIVI Quotidien</button>
+          <button class="mobile-tool-card" type="button" data-page="annual"><span class="mobile-tool-icon">📊</span> Statistiques</button>
+        </div>
+      </div>
+      <div class="mobile-sales-preview">
+        <div class="mobile-sales-header"><strong>Mes ventes et mes clients</strong><button class="mobile-link" type="button" data-page="sales">voir plus</button></div>
+      </div>
+    </section>
+    <section class="mobile-pending-orders" aria-label="Commandes en attente">section class="mobile-pending-orders" aria-label="Commandes en attente">
       <span class="mobile-pending-count">${number(pendingOrders)}</span>
       <span class="mobile-pending-label">COMMANDES EN ATTENTES</span>
     </section>
@@ -856,6 +908,46 @@ function renderBands(snapshot) {
       ${rows ? `<div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Âge</th><th>Vente cible estimée</th><th>En élevage</th><th>Mortalité</th><th>Poids réel / cible</th><th>Coût / sujet sorti</th><th>Coût cumulé</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyState('Pas encore de bande', 'Ajoutez un lot pour calculer son coût de revient et suivre ses performances.', '<button class="primary-button" data-action="new-band">Créer la première bande</button>')}</section>
     ${archived.length ? `<section class="panel table-panel archived-panel"><div class="panel-header"><div><h2>Bandes archivées</h2><p>${archived.length} bande${archived.length > 1 ? 's' : ''} retirée${archived.length > 1 ? 's' : ''} de l’élevage actif — plus aucune opération dans les menus du quotidien, mais l’historique reste comptabilisé dans les statistiques annuelles. La suppression définitive efface la bande et toutes ses données.</p></div></div>
       <div class="table-wrap"><table><thead><tr><th>Bande / souche</th><th>Arrivée</th><th>Poussins</th><th>Sujets restants</th><th>Mortalité</th><th>Chiffre d’affaires</th><th>Archivée le</th><th>Actions</th></tr></thead><tbody>${archivedRows}</tbody></table></div></section>` : ''}`;
+}
+
+let mobileBandTimer = null;
+let mobileBandIndex = 0;
+
+function updateMobileBandDisplay(bands) {
+  if (!bands || !bands.length) return;
+  const snap = window.snapshot || {};
+  const i = mobileBandIndex % bands.length;
+  const j = (mobileBandIndex + 1) % bands.length;
+  const a = bands[i];
+  const b = bands[j];
+  const costA = bandCost(a, snap);
+  const revA = bandRevenue(a, snap);
+  document.querySelectorAll('.mobile-kpi-band').forEach((node) => { node.textContent = a.name; });
+  const exp = document.querySelector('.mobile-kpi-expenses');
+  if (exp) exp.textContent = currency(costA);
+  const prof = document.querySelector('.mobile-kpi-profit');
+  if (prof) prof.textContent = currency(revA - costA);
+  const names = document.querySelectorAll('.mobile-band-name');
+  if (names[0]) names[0].textContent = a.name;
+  if (names[1]) names[1].textContent = b.name;
+  const stocks = document.querySelectorAll('.mobile-band-stock-val');
+  if (stocks[0]) stocks[0].textContent = number(activeBirds(a, snap));
+  if (stocks[1]) stocks[1].textContent = number(activeBirds(b, snap));
+}
+
+function startMobileBandRotation(bands) {
+  if (mobileBandTimer) clearInterval(mobileBandTimer);
+  if (!bands || bands.length < 2) { updateMobileBandDisplay(bands); return; }
+  mobileBandIndex = 0;
+  updateMobileBandDisplay(bands);
+  mobileBandTimer = window.setInterval(() => {
+    mobileBandIndex = (mobileBandIndex + 1) % bands.length;
+    updateMobileBandDisplay(bands);
+  }, 10000);
+}
+
+function stopMobileBandRotation() {
+  if (mobileBandTimer) { clearInterval(mobileBandTimer); mobileBandTimer = null; }
 }
 
 function renderDaily(snapshot) {
@@ -1477,6 +1569,12 @@ async function render() {
   const renderers = { dashboard: renderDashboard, bands: renderBands, daily: renderDaily, sales: renderSales, orders: renderOrders, expenses: renderExpenses, annual: renderAnnualStats };
   $('#page-container').innerHTML = await renderers[currentPage](snapshot);
   $('#page-container').setAttribute('aria-labelledby', `tab-${currentPage}`);
+  if (currentPage === 'dashboard') {
+    const dashBands = visibleBands(snapshot);
+    startMobileBandRotation(dashBands);
+  } else {
+    stopMobileBandRotation();
+  }
   $('#page-title').textContent = PAGE_LABELS[currentPage];
   $('#band-count').textContent = snapshot.bands.filter((band) => !isArchived(band)).length;
   updateOrderBadge();
@@ -1493,6 +1591,7 @@ async function render() {
 async function setPage(page, { pushHistory = false, focusTab = false, scrollToTop = false } = {}) {
   if (!Object.prototype.hasOwnProperty.call(PAGE_LABELS, page)) return;
   currentPage = page;
+  if (page !== 'dashboard') stopMobileBandRotation();
   if (pushHistory && location.hash !== `#${page}`) history.pushState({ page }, '', `#${page}`);
   $$('.nav-item[role="tab"]').forEach((tab) => {
     const active = tab.dataset.page === page;

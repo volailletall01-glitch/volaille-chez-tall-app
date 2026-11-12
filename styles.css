@@ -641,9 +641,44 @@ body.is-authenticated .auth-screen { display: none; }
 }
 
 /* ---------- Interrupteur de mise en vente et déconnexion ---------- */
-.mobile-pending-orders,
-.mobile-quick-actions,
-.mobile-sales-preview { display: none; }
+.mobile-dashboard { display: none; }
+
+@media (max-width: 760px) {
+  .mobile-dashboard { display: block; }
+  .band-kpi-list,
+  .band-chart-panel,
+  .mobile-pending-orders { display: none; }
+  .mobile-dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .mobile-dash-brand { display: flex; align-items: center; gap: 8px; }
+  .mobile-avatar { width: 34px; height: 34px; border-radius: 50%; background: #0D7A4D; color: #fff; display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; }
+  .mobile-dash-brand strong { font: 700 16px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-dash-icons { display: flex; gap: 8px; }
+  .mobile-icon-btn { width: 32px; height: 32px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 14px; }
+  .mobile-salutation { margin: 4px 0 12px; font: 800 20px 'Manrope', sans-serif; color: #1d2924; }
+  .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .mobile-action-primary { min-height: 48px; border: 0; border-radius: 12px; background: #0D7A4D; color: #fff; font: 700 12px 'Manrope', sans-serif; letter-spacing: .4px; }
+  .mobile-action-secondary { min-height: 48px; border: 1px solid #0D7A4D; border-radius: 12px; background: #fff; color: #0D7A4D; font: 700 12px 'Manrope', sans-serif; letter-spacing: .4px; }
+  .mobile-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .mobile-kpi-card { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .mobile-kpi-label { display: block; font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .4px; margin-bottom: 6px; }
+  .mobile-kpi-value { display: block; font: 800 16px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-kpi-card small { color: var(--muted); font-size: 9px; }
+  .mobile-bands-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .mobile-band-card { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+  .mobile-band-title { font-size: 9px; font-weight: 700; color: var(--muted); letter-spacing: .4px; }
+  .mobile-band-stock { font-size: 11px; font-weight: 700; color: #1d2924; }
+  .mobile-tools-col { display: flex; flex-direction: column; gap: 8px; }
+  .mobile-tool-card { flex: 1; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: #0D7A4D; font: 700 10px 'Manrope', sans-serif; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .mobile-sales-preview { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .mobile-sales-header { display: flex; align-items: center; justify-content: space-between; }
+  .mobile-sales-header strong { font: 700 12px 'Manrope', sans-serif; color: #0D7A4D; }
+  .mobile-link { border: 0; background: transparent; color: #0D7A4D; font: 700 11px 'Manrope', sans-serif; }
+  .mobile-pending-orders { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin: 0 0 14px; border-radius: 12px; background: #eef6f0; color: #0D7A4D; font-weight: 800; }
+  .mobile-pending-count { font: 800 20px 'Manrope', sans-serif; }
+  .mobile-pending-label { font-size: 10px; letter-spacing: .6px; }
+  .mobile-quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+  .mobile-action-tile { min-height: 56px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: #0D7A4D; font: 700 10px 'Manrope', sans-serif; }
+}
 
 @media (max-width: 760px) {
   .mobile-pending-orders { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin: 0 0 14px; border-radius: 12px; background: var(--amber-bg); color: var(--amber); font-weight: 800; }
