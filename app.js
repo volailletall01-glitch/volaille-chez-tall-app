@@ -1646,8 +1646,9 @@ async function recordCreditPayment(saleId, button) {
   const updated = { ...sale, paid_amount: newPaid, payment_status: newPaid >= Number(sale.total_amount) ? 'paid' : 'partial' };
   await saveRecord('sales', updated);
   toast('Paiement enregistré.');
+  const band = (window.snapshot?.bands || []).find((item) => item.id === sale.batch_id);
   if (newPaid >= Number(sale.total_amount)) {
-    if (confirm('Solde réglé. Télécharger le reçu ?')) downloadReceipt(saleId);
+    if (confirm('Solde réglé. Télécharger le reçu mis à jour ?')) generateReceipt(updated, band, { title: 'TICKET DE CAISSE' });
   }
   closeDialog();
   await render();
@@ -2242,13 +2243,14 @@ function openTransactionDialog({
       </div>
       <div class="field full"><label for="transaction-message">Message WhatsApp</label><textarea id="transaction-message" rows="7">${esc(message)}</textarea></div>
       <div class="transaction-actions">
-        <a class="primary-button" id="transaction-whatsapp" href="${esc(whatsappLink(clientPhone, message))}" target="_blank" rel="noopener">Envoyer par WhatsApp</a>
-        <button class="secondary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>
+        ${receipt ? `<button class="primary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>` : ''}
+        <a class="secondary-button" id="transaction-whatsapp" href="${esc(whatsappLink(clientPhone, message))}" target="_blank" rel="noopener">Message WhatsApp</a>
       </div>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
     </div>`);
   const textarea = $('#transaction-message');
   const link = $('#transaction-whatsapp');
+  const receiptBtn = $('#transaction-receipt');
   if (textarea && link) {
     textarea.addEventListener('input', () => { link.href = whatsappLink(clientPhone, textarea.value); });
   }
