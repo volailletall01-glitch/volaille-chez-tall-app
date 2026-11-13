@@ -226,8 +226,12 @@
 
     if (state.thanks) { updateTotal(); return; }
 
-    if (heads > 0) {
+    if (heads > 0 && bandName) {
       setCardVisibility({ form: true, soldout: false, unavailable: false });
+    } else if (heads > 0) {
+      setCardVisibility({ form: false, soldout: false, unavailable: true });
+      $('#unavailable-card h2').textContent = 'Bande non définie';
+      $('#unavailable-card p').textContent = 'Aucune bande n’est actuellement mise en vente. Merci de revenir plus tard ou de nous contacter directement.';
     } else {
       setCardVisibility({ form: false, soldout: true, unavailable: false });
       $('#soldout-message').textContent = 'Désolé, le stock est actuellement épuisé.';
@@ -371,6 +375,10 @@
         return;
       }
       const { bandId, bandName } = sellingConfig();
+      if (!bandId || !bandName) {
+        setHint('Aucune bande n’est actuellement mise en vente.', true);
+        return;
+      }
       values.band_id = bandId;
       values.band_name = bandName || null;
       const rows = await request('/rest/v1/orders', {
