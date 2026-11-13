@@ -74,8 +74,28 @@
             <span id="auth-submit-label">Se connecter</span>
           </button>
           <p class="auth-hint" id="auth-hint">Un code à 6 chiffres de votre application d’authentification sera demandé.</p>
+          <p class="auth-link-row" data-signin-only hidden><button type="button" class="link-button" id="auth-forgot-password">Mot de passe oublié ?</button></p>
         </form>
-        <form class="auth-form auth-totp-form" id="auth-totp-form" onsubmit="return false" hidden novalidate>
+        <div class="auth-form auth-recovery" id="auth-recovery" hidden>
+          <h2>Réinitialiser le mot de passe</h2>
+          <p class="auth-hint">Choisissez un nouveau mot de passe pour votre compte.</p>
+          <div class="auth-field">
+            <label for="recovery-password">Nouveau mot de passe</label>
+            <div class="auth-password">
+              <input id="recovery-password" type="password" minlength="6" placeholder="6 caractères minimum" required />
+              <button type="button" id="recovery-toggle-password" aria-label="Afficher le mot de passe">Afficher</button>
+            </div>
+          </div>
+          <div class="auth-field">
+            <label for="recovery-password-confirm">Confirmer le mot de passe</label>
+            <input id="recovery-password-confirm" type="password" minlength="6" placeholder="Répétez le mot de passe" required />
+          </div>
+          <p class="auth-error" id="recovery-error" role="alert" hidden></p>
+          <button class="auth-submit" id="recovery-submit" type="button">
+            <span id="recovery-submit-label">Enregistrer le nouveau mot de passe</span>
+          </button>
+          <p class="auth-hint"><button type="button" class="link-button" id="recovery-back">Retour à la connexion</button></p>
+        </div>
           <div class="auth-totp-head">
             <span class="auth-totp-badge" data-icon="lock" aria-hidden="true"></span>
             <div>

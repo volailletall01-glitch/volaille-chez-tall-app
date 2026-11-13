@@ -238,6 +238,7 @@ let dataLoaded = false;
 let authMode = 'signin';
 let pendingAuth = null;
 let pendingSignupWhatsApp = '';
+let recoveryToken = '';
 
 function readStoredSession() {
   try {
@@ -2878,6 +2879,7 @@ function setAuthMode(mode) {
     tab.setAttribute('aria-selected', String(active));
   });
   $$('[data-signup-only]').forEach((node) => { node.hidden = authMode !== 'signup'; });
+  $$('[data-signin-only]').forEach((node) => { node.hidden = authMode !== 'signin'; });
   const password = $('#auth-password');
   if (password) password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   const hint = $('#auth-hint');
@@ -2894,6 +2896,13 @@ function showAuthScreen() {
   if (screen) screen.hidden = false;
   pendingAuth = null;
   pendingSignupWhatsApp = '';
+  recoveryToken = '';
+  const recovery = $('#auth-recovery');
+  if (recovery) recovery.hidden = true;
+  const loginForm = $('#auth-form');
+  if (loginForm) loginForm.hidden = false;
+  const totpForm = $('#auth-totp-form');
+  if (totpForm) totpForm.hidden = true;
   setAuthMode('signin');
   setAuthStep('login');
   window.setTimeout(() => $('#auth-identifier')?.focus(), 420);
@@ -3340,6 +3349,77 @@ function bindAuthUI() {
   setAuthMode('signin');
 }
 
+function bindForgotPassword() {
+  $('#auth-forgot-password')?.addEventListener('click', async () => {
+    setAuthError('');
+    let email = $('#auth-identifier')?.value.trim() || '';
+    if (!email || !email.includes('@')) {
+      const entered = window.prompt('Entrez votre adresse email pour réinitialiser le mot de passe :');
+      email = String(entered || '').trim();
+    }
+    if (!email || !email.includes('@')) { setAuthError('Entrez une adresse email valide.'); return; }
+    try {
+      await authRequest('/auth/v1/recover', { body: { email } });
+      toast('Si un compte existe pour cet email, un lien de réinitialisation a été envoyé.');
+    } catch (error) {
+      setAuthError(friendlyAuthError(error));
+    }
+  });
+}
+
+function bindRecoveryForm() {
+  $('#recovery-toggle-password')?.addEventListener('click', () => {
+    const input = $('#recovery-password');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+  $('#recovery-back')?.addEventListener('click', () => {
+    recoveryToken = '';
+    const recovery = $('#auth-recovery');
+    if (recovery) recovery.hidden = true;
+    const loginForm = $('#auth-form');
+    if (loginForm) loginForm.hidden = false;
+    showAuthScreen();
+  });
+  $('#recovery-submit')?.addEventListener('click', async () => {
+    const err = $('#recovery-error');
+    const setError = (msg) => { if (err) { err.textContent = msg || ''; err.hidden = !msg; } };
+    setError('');
+    const pwd = $('#recovery-password')?.value || '';
+    const confirmPwd = $('#recovery-password-confirm')?.value || '';
+    if (pwd.length < 6) { setError('Le mot de passe doit contenir au moins 6 caractères.'); return; }
+    if (pwd !== confirmPwd) { setError('Les deux mots de passe ne correspondent pas.'); return; }
+    if (!recoveryToken) { setError('Lien de réinitialisation invalide ou expiré.'); return; }
+    const btn = $('#recovery-submit');
+    const label = $('#recovery-submit-label');
+    if (btn) btn.disabled = true;
+    if (label) label.textContent = 'Enregistrement…';
+    try {
+      await authRequest('/auth/v1/user', { method: 'PUT', token: recoveryToken, body: { password: pwd } });
+      let email = '';
+      try {
+        const user = await authRequest('/auth/v1/user', { method: 'GET', token: recoveryToken });
+        email = user?.email || '';
+      } catch {}
+      recoveryToken = '';
+      const recovery = $('#auth-recovery');
+      if (recovery) recovery.hidden = true;
+      const loginForm = $('#auth-form');
+      if (loginForm) loginForm.hidden = false;
+      if (email) {
+        const id = $('#auth-identifier');
+        if (id) id.value = email;
+      }
+      toast('Mot de passe mis à jour. Connectez-vous avec votre nouveau mot de passe.');
+    } catch (error) {
+      setError(friendlyAuthError(error));
+    } finally {
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = 'Enregistrer le nouveau mot de passe';
+    }
+  });
+}
+
 async function startApp() {
   hideAuthScreen();
   updateAccountUI();
@@ -3550,12 +3630,31 @@ async function main() {
     navigator.serviceWorker.register('./sw.js').catch((error) => console.error('Service worker non enregistré :', error));
   }
   bindAuthUI();
+  bindForgotPassword();
+  bindRecoveryForm();
   updateAccountUI();
-  const restored = await ensureSession();
-  if (restored) {
-    await startApp();
+  const hashParams = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+  const recoveryAccessToken = hashParams.get('access_token');
+  const recoveryType = hashParams.get('type');
+  if (recoveryAccessToken && recoveryType === 'recovery') {
+    recoveryToken = recoveryAccessToken;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    document.body.classList.remove('is-authenticated');
+    const screen = $('#auth-screen');
+    if (screen) screen.hidden = false;
+    const loginForm = $('#auth-form');
+    if (loginForm) loginForm.hidden = true;
+    const totpForm = $('#auth-totp-form');
+    if (totpForm) totpForm.hidden = true;
+    const recovery = $('#auth-recovery');
+    if (recovery) recovery.hidden = false;
   } else {
-    showAuthScreen();
+    const restored = await ensureSession();
+    if (restored) {
+      await startApp();
+    } else {
+      showAuthScreen();
+    }
   }
 }
 
