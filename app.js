@@ -1565,17 +1565,39 @@ function buildReceiptPdf(sale, band, options = {}) {
   return result;
 }
 
-function generateReceipt(sale, band, options = {}) {
+function receiptBlobAndName(sale, band, options = {}) {
   const bytes = buildReceiptPdf(sale, band, options);
   const blob = new Blob([bytes], { type: 'application/pdf' });
+  const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const filename = `${options.filenamePrefix || 'recu'}-${safeName}-${sale.sale_date || 'vente'}.pdf`;
+  return { blob, filename };
+}
+
+function generateReceipt(sale, band, options = {}) {
+  const { blob, filename } = receiptBlobAndName(sale, band, options);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  const safeName = normalizeAscii(sale.client_name || 'vente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  a.download = `${options.filenamePrefix || 'recu'}-${safeName}-${sale.sale_date || 'vente'}.pdf`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+}
+
+async function shareReceipt(sale, band, options = {}) {
+  const { blob, filename } = receiptBlobAndName(sale, band, options);
+  const file = new File([blob], filename, { type: 'application/pdf' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: options.shareTitle || 'Reçu Volaille chez TALL', text: options.shareText || 'Voici votre reçu.' });
+      toast('Reçu envoyé.');
+      return;
+    } catch (error) {
+      if (error && error.name === 'AbortError') return;
+    }
+  }
+  generateReceipt(sale, band, options);
+  toast('Partage non disponible : le reçu a été téléchargé.');
 }
 
 function downloadReceipt(saleId, button) {
@@ -2243,7 +2265,8 @@ function openTransactionDialog({
       </div>
       <div class="field full"><label for="transaction-message">Message WhatsApp</label><textarea id="transaction-message" rows="7">${esc(message)}</textarea></div>
       <div class="transaction-actions">
-        ${receipt ? `<button class="primary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>` : ''}
+        ${receipt ? `<button class="primary-button" type="button" id="transaction-share">Envoyer le reçu</button>` : ''}
+        ${receipt ? `<button class="secondary-button" type="button" id="transaction-receipt">Télécharger le reçu</button>` : ''}
         <a class="secondary-button" id="transaction-whatsapp" href="${esc(whatsappLink(clientPhone, message))}" target="_blank" rel="noopener">Message WhatsApp</a>
       </div>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog>Fermer</button></div>
@@ -2254,6 +2277,9 @@ function openTransactionDialog({
   if (textarea && link) {
     textarea.addEventListener('input', () => { link.href = whatsappLink(clientPhone, textarea.value); });
   }
+  $('#transaction-share')?.addEventListener('click', () => {
+    shareReceipt(receipt, receiptBand, receiptOptions);
+  });
   $('#transaction-receipt')?.addEventListener('click', () => {
     generateReceipt(receipt, receiptBand, receiptOptions);
     toast('Reçu PDF téléchargé.');
