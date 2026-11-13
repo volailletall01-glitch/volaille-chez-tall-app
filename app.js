@@ -512,7 +512,7 @@ async function beginPasswordSignIn(identifier, password) {
     body: { email, password },
   });
   if (!payload?.access_token) throw new Error('Email ou mot de passe incorrect.');
-  return prepareMfaChallenge(payload, email);
+  return payload;
 }
 
 async function signUpWithIdentifier(identifier, password, whatsapp) {
@@ -2884,8 +2884,8 @@ function setAuthMode(mode) {
   if (password) password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
   const hint = $('#auth-hint');
   if (hint) hint.textContent = authMode === 'signup'
-    ? 'Créez votre compte puis configurez la double authentification avec votre application d’authentification.'
-    : 'Un code à 6 chiffres de votre application d’authentification sera demandé.';
+    ? 'Créez votre compte avec votre email et un mot de passe.'
+    : 'Entrez votre email et votre mot de passe pour vous connecter.';
   setAuthError('');
   authBusy(false);
 }
@@ -3255,87 +3255,24 @@ function bindAuthUI() {
       pendingSignupWhatsApp = authMode === 'signup' ? normalizedWhatsApp : '';
       const payload = authMode === 'signup'
         ? await signUpWithIdentifier(identifier, password, normalizedWhatsApp)
-        : null;
-      const challenge = payload
-        ? await prepareMfaChallenge(payload, identifier)
         : await beginPasswordSignIn(identifier, password);
-      pendingAuth = challenge;
+      pendingAuth = null;
+      pendingSignupWhatsApp = '';
+      storeSession(payload);
+      if (authMode === 'signup') {
+        await upsertProfile('', normalizedWhatsApp);
+        if (normalizedWhatsApp) await publishManagerWhatsApp(normalizedWhatsApp);
+      }
       const passwordInput = $('#auth-password');
       if (passwordInput) passwordInput.value = '';
-      showTotpStep(challenge);
-      toast(challenge.mode === 'enroll'
-        ? 'Scannez le QR code pour activer la double authentification.'
-        : 'Saisissez le code de votre application d’authentification.');
+      await startApp();
+      toast(authMode === 'signup' ? 'Compte créé · bienvenue.' : 'Connexion réussie · bienvenue.');
     } catch (error) {
       pendingSignupWhatsApp = '';
       setAuthError(friendlyAuthError(error));
     } finally {
       authBusy(false);
     }
-  });
-  $('#auth-totp-form')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!pendingAuth) {
-      setAuthStep('login');
-      setAuthError('Votre session a expiré. Reconnectez-vous.');
-      return;
-    }
-    const code = ($('#auth-totp-code')?.value || '').replace(/\D/g, '');
-    setTotpError('');
-    if (code.length !== 6) { setTotpError('Entrez le code à 6 chiffres affiché par votre application.'); return; }
-    totpBusy(true);
-    try {
-      const payload = await verifyTotpCode(
-        pendingAuth.factorId,
-        pendingAuth.challengeId,
-        code,
-        pendingAuth.passwordPayload.access_token,
-      );
-      if (!payload?.access_token) throw new Error('Code incorrect.');
-      const signupWhatsApp = pendingSignupWhatsApp;
-      pendingAuth = null;
-      pendingSignupWhatsApp = '';
-      storeSession(payload);
-      await upsertProfile('', signupWhatsApp);
-      if (signupWhatsApp) await publishManagerWhatsApp(signupWhatsApp);
-      setAuthStep('login');
-      await startApp();
-      toast('Double authentification validée · bienvenue.');
-    } catch (error) {
-      const message = String(error?.message || error || '');
-      if (/challenge.*(expired|not found)|invalid.*challenge/i.test(message)) {
-        try {
-          pendingAuth.challengeId = await createTotpChallenge(
-            pendingAuth.factorId,
-            pendingAuth.passwordPayload.access_token,
-          );
-        } catch (refreshError) {
-          console.warn('Nouveau défi TOTP impossible', refreshError);
-        }
-      }
-      setTotpError(friendlyTotpError(error));
-      $('#auth-totp-code')?.select();
-    } finally {
-      totpBusy(false);
-    }
-  });
-  $('#auth-totp-back')?.addEventListener('click', () => {
-    if (pendingAuth?.mode === 'enroll' && pendingAuth.factorId) {
-      authRequest(`/auth/v1/factors/${encodeURIComponent(pendingAuth.factorId)}`, {
-        method: 'DELETE',
-        token: pendingAuth.passwordPayload.access_token,
-      }).catch(() => {});
-    }
-    pendingAuth = null;
-    pendingSignupWhatsApp = '';
-    setAuthStep('login');
-    setAuthError('');
-    $('#auth-password')?.focus();
-  });
-  $('#auth-totp-code')?.addEventListener('input', (event) => {
-    const input = event.target;
-    const digits = input.value.replace(/\D/g, '').slice(0, 6);
-    if (input.value !== digits) input.value = digits;
   });
   $('#auth-toggle-password')?.addEventListener('click', () => {
     const input = $('#auth-password');
