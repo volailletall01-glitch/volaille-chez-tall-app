@@ -1,6 +1,6 @@
 ﻿const DB_NAME = 'poulet-pro';
 const DB_VERSION = 1;
-const STORE_NAMES = ['bands', 'daily_logs', 'inventory_items', 'inventory_movements', 'sales', 'charges', 'clients', 'meta'];
+const STORE_NAMES = ['bands', 'daily_logs', 'sales', 'charges', 'meta'];
 // Jeu d'icônes « duotone 3D » : formes pleines, seconde teinte et reflet,
 // pour un rendu plus lisible et plus relief que les anciens traits fins.
 const ICONS = {
@@ -12,14 +12,10 @@ const ICONS = {
   expenses: '<rect x="2.8" y="5.4" width="18.4" height="14.4" rx="3.2" fill="currentColor" opacity=".45"/><path d="M5.2 5.4V4.6a2 2 0 0 1 2-2h9.6v2.8H5.2Z" fill="currentColor"/><rect x="15" y="10.6" width="6.2" height="4.8" rx="2.4" fill="currentColor"/><circle cx="17.6" cy="13" r="1" fill="#fff" opacity=".85"/>',
   clients: '<circle cx="9" cy="7.4" r="3.7" fill="currentColor"/><path d="M2.6 20.6c0-3.8 2.9-6.6 6.4-6.6s6.4 2.8 6.4 6.6H2.6Z" fill="currentColor" opacity=".45"/><circle cx="17.4" cy="8.2" r="2.9" fill="currentColor" opacity=".6"/><path d="M15.6 14.1c3.2 0 5.8 2.8 5.8 6.5h-4.2c.1-1.2-.2-2.4-.8-3.4-.5-.9-1.2-1.7-2-2.4.4-.4.8-.6 1.2-.7Z" fill="currentColor" opacity=".8"/>',
   stats: '<rect x="3" y="12.4" width="4.4" height="8.6" rx="1.8" fill="currentColor" opacity=".45"/><rect x="9.8" y="7.8" width="4.4" height="13.2" rx="1.8" fill="currentColor" opacity=".7"/><rect x="16.6" y="3" width="4.4" height="18" rx="1.8" fill="currentColor"/>',
-  sync: '<path d="M20.4 6.2v5.4h-5.4M3.6 17.8v-5.4h5.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.4 8.6A7.4 7.4 0 0 1 18.2 6l2.2 2.6M3.6 15.4l2.2 2.6A7.4 7.4 0 0 0 18.6 15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
   settings: '<path d="M12 2.4 14 4l2.6-.4 1.5 2 2.3 1.2-.2 2.6 1.6 2-1.6 2 .2 2.6-2.3 1.2-1.5 2-2.6-.4-2 1.6-2-1.6-2.6.4-1.5-2-2.3-1.2.2-2.6L2 12l1.6-2-.2-2.6L5.7 6.2 7.2 4.2 9.8 4.6 12 2.4Z" fill="currentColor" opacity=".45"/><circle cx="12" cy="12" r="3.6" fill="currentColor"/><circle cx="10.8" cy="10.8" r="1.1" fill="#fff" opacity=".7"/>',
   bird: '<path d="M20.4 11.6c0 4.3-3.5 7.8-7.8 7.8H8.3l-3.9 2.6.8-4.4a7.7 7.7 0 0 1-1.7-4.8A7.7 7.7 0 0 1 11.2 5h1.4l2.5-2.4 1.1 3.4h.4a7.8 7.8 0 0 1 3.8 5.6Z" fill="currentColor"/><circle cx="14.4" cy="9.6" r="1" fill="#fff"/><path d="m17.4 10.9 2.6.6-2.4 1.4" fill="currentColor"/><path d="M10.4 19.2v2.4M13.8 19.2v2.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
   orders: '<rect x="4" y="4.2" width="16" height="17.4" rx="3.4" fill="currentColor" opacity=".45"/><rect x="8.2" y="2.2" width="7.6" height="4.4" rx="2" fill="currentColor"/><path d="M8.2 11.2h7.6M8.2 15.2h5.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
-  feed: '<path d="M8.2 2.6h7.6l-.9 2.6c2.5 1.7 4 4.6 4 7.8V19a2.6 2.6 0 0 1-2.6 2.6H7.7A2.6 2.6 0 0 1 5.1 19v-6c0-3.2 1.5-6.1 4-7.8l-.9-2.6Z" fill="currentColor" opacity=".5"/><path d="M12 9.4v6.2m0-3.4-1.9-1.9m1.9 1.9 1.9-1.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>',
-  water: '<path d="M12 2.4s7.2 7.8 7.2 12.2a7.2 7.2 0 0 1-14.4 0C4.8 10.2 12 2.4 12 2.4Z" fill="currentColor"/><path d="M8.8 14.8a3.4 3.4 0 0 0 2.8 3.4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity=".75"/>',
   money: '<rect x="2.4" y="5.6" width="19.2" height="12.8" rx="3" fill="currentColor" opacity=".45"/><circle cx="12" cy="12" r="3.4" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="#fff" opacity=".8"/><path d="M6 9.2h1.6M16.4 14.8H18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
-  box: '<path d="M3.2 7.6 12 3l8.8 4.6L12 12.2 3.2 7.6Z" fill="currentColor"/><path d="M3.2 9.5 11 13.6v7L3.2 16.6v-7.1Z" fill="currentColor" opacity=".45"/><path d="M20.8 9.5 13 13.6v7l7.8-4V9.5Z" fill="currentColor" opacity=".72"/>',
   search: '<circle cx="10.6" cy="10.6" r="6.4" fill="currentColor" opacity=".35"/><circle cx="10.6" cy="10.6" r="6.4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15.6 15.6 5 5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="8.8" cy="8.8" r="1.6" fill="#fff" opacity=".8"/>',
   bell: '<path d="M12 2.6A6.5 6.5 0 0 0 5.5 9v3.4L3.6 16h16.8l-1.9-3.6V9A6.5 6.5 0 0 0 12 2.6Z" fill="currentColor" opacity=".55"/><path d="M9.4 18.4a2.8 2.8 0 0 0 5.2 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="4.6" r="1.2" fill="currentColor"/>',
   edit: '<path d="M4 20h4.6L20 8.6a2.7 2.7 0 0 0-3.8-3.8L4.9 16.1 4 20Z" fill="currentColor" opacity=".6"/><path d="m15 5.6 3.8 3.8" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/>',
@@ -27,7 +23,6 @@ const ICONS = {
   restore: '<path d="M4.4 9.8a7.8 7.8 0 1 1-.4 4.6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M3.2 4.2v6.2h6.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
   close: '<path d="M5.2 5.2 18.8 18.8M18.8 5.2 5.2 18.8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
   plus: '<path d="M12 4.4v15.2M4.4 12h15.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>',
-  lock: '<rect x="4.4" y="10" width="15.2" height="11.6" rx="3" fill="currentColor" opacity=".55"/><path d="M7.6 10V7.8a4.4 4.4 0 0 1 8.8 0V10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="15.6" r="1.6" fill="currentColor"/>',
   check: '<circle cx="12" cy="12" r="9.4" fill="currentColor" opacity=".45"/><path d="m7.4 12.4 3 3 6.2-6.6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>',
   person: '<circle cx="12" cy="7.8" r="4.3" fill="currentColor"/><path d="M12 13.7c-4.6 0-7.9 3-7.9 7.3h15.8c0-4.3-3.3-7.3-7.9-7.3Z" fill="currentColor" opacity=".45"/><circle cx="10.5" cy="6.5" r="1.5" fill="#fff" opacity=".55"/>',
 };
@@ -41,7 +36,6 @@ const CATEGORY_LABELS = {
   health: 'Santé / prophylaxie', labor: 'Main-d’œuvre', water_energy: 'Eau / électricité',
   delivery: 'Transport livraison client', maintenance: 'Entretien',
 };
-const CHANNEL_LABELS = { wholesale: 'Grossiste / revendeur', restaurant: 'Restaurant', supermarket: 'Supermarché', retail: 'Détail / comptoir', other: 'Autre' };
 const PAYMENT_LABELS = { cash: 'Espèces', mobile_money: 'Mobile Money', transfer: 'Virement', credit: 'Crédit client' };
 let db;
 let logoJpeg = null;
@@ -153,67 +147,12 @@ function localWriteMeta(key, value) {
   });
 }
 
-async function localDeleteRecord(storeName, id) {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readwrite');
-    transaction.objectStore(storeName).delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
-  });
-}
-
-async function localDeleteRecords(storeName, ids) {
-  const unique = [...new Set(ids.filter(Boolean))];
-  if (!unique.length) return;
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, 'readwrite');
-    const store = transaction.objectStore(storeName);
-    for (const id of unique) store.delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression impossible.'));
-  });
-}
-
-async function localDeleteLogsForBand(bandId) {
-  const logs = (await localReadAll('daily_logs')).filter((log) => log.batch_id === bandId);
-  if (!logs.length) return;
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction('daily_logs', 'readwrite');
-    const store = transaction.objectStore('daily_logs');
-    for (const log of logs) store.delete(log.id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error || new Error('Suppression de l’historique impossible.'));
-  });
-}
-
-async function localSaveRecords(entries) {
-  const timestamp = new Date().toISOString();
-  const prepared = entries.map(({ store, record }) => ({
-    store, record: { ...record, updated_at: timestamp },
-  }));
-  const names = [...new Set(prepared.map((entry) => entry.store))];
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(names, 'readwrite');
-    for (const entry of prepared) {
-      transaction.objectStore(entry.store).put(entry.record);
-    }
-    transaction.oncomplete = () => resolve(prepared.map((entry) => entry.record));
-    transaction.onerror = () => reject(transaction.error || new Error('Enregistrement local impossible.'));
-    transaction.onabort = () => reject(transaction.error || new Error('Enregistrement local annulé.'));
-  });
-}
-
-async function localSaveRecord(storeName, record) {
-  const [saved] = await localSaveRecords([{ store: storeName, record }]);
-  return saved;
-}
-
 async function localGetSnapshot() {
-  const [bands, logs, items, movements, sales, charges, clients] = await Promise.all([
-    localReadAll('bands'), localReadAll('daily_logs'), localReadAll('inventory_items'), localReadAll('inventory_movements'),
-    localReadAll('sales'), localReadAll('charges'), localReadAll('clients'),
+  const [bands, logs, sales, charges] = await Promise.all([
+    localReadAll('bands'), localReadAll('daily_logs'),
+    localReadAll('sales'), localReadAll('charges'),
   ]);
-  return { bands, logs, items, movements, sales, charges, clients };
+  return { bands, logs, sales, charges };
 }
 
 /* ---------------------------------------------------------------------------
@@ -236,7 +175,6 @@ let remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
 let remoteSettings = {};
 let dataLoaded = false;
 let authMode = 'signin';
-let pendingAuth = null;
 let pendingSignupWhatsApp = '';
 let recoveryToken = '';
 
@@ -427,85 +365,6 @@ function formatWhatsAppNumber(digits) {
   return value ? `+${value}` : '';
 }
 
-function totpFactorFrom(user) {
-  const factors = Array.isArray(user?.factors) ? user.factors : [];
-  return factors.find((factor) => {
-    const type = factor.factor_type || factor.type;
-    return type === 'totp' && factor.status === 'verified';
-  }) || null;
-}
-
-async function fetchAuthUser(token) {
-  return authRequest('/auth/v1/user', { method: 'GET', token });
-}
-
-async function clearUnverifiedFactors(user, token) {
-  const factors = Array.isArray(user?.factors) ? user.factors : [];
-  const stale = factors.filter((factor) => {
-    const type = factor.factor_type || factor.type;
-    return type === 'totp' && factor.status !== 'verified';
-  });
-  await Promise.allSettled(stale.map((factor) =>
-    authRequest(`/auth/v1/factors/${encodeURIComponent(factor.id)}`, { method: 'DELETE', token })));
-}
-
-async function enrollTotpFactor(token) {
-  const enrollment = await authRequest('/auth/v1/factors', {
-    token,
-    body: { factor_type: 'totp', friendly_name: 'Volaille chez TALL' },
-  });
-  if (!enrollment?.id) throw new Error('Impossible de préparer la double authentification.');
-  return enrollment;
-}
-
-async function createTotpChallenge(factorId, token) {
-  const challenge = await authRequest(`/auth/v1/factors/${encodeURIComponent(factorId)}/challenge`, {
-    token,
-    body: {},
-  });
-  if (!challenge?.id) throw new Error('Impossible de préparer la vérification.');
-  return challenge.id;
-}
-
-async function verifyTotpCode(factorId, challengeId, code, token) {
-  return authRequest(`/auth/v1/factors/${encodeURIComponent(factorId)}/verify`, {
-    token,
-    body: { challenge_id: challengeId, code },
-  });
-}
-
-function totpQrSource(qrCode) {
-  const value = String(qrCode || '').trim();
-  if (!value) return '';
-  if (/^data:image\//i.test(value)) return value;
-  if (value.startsWith('<svg') || value.startsWith('<?xml')) {
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(value)}`;
-  }
-  return value;
-}
-
-async function prepareMfaChallenge(payload, email = '') {
-  const token = payload.access_token;
-  const user = await fetchAuthUser(token);
-  const factor = totpFactorFrom(user);
-  if (factor) {
-    const challengeId = await createTotpChallenge(factor.id, token);
-    return { email: email || user.email || '', passwordPayload: payload, factorId: factor.id, challengeId, mode: 'verify' };
-  }
-  await clearUnverifiedFactors(user, token);
-  const enrollment = await enrollTotpFactor(token);
-  const challengeId = await createTotpChallenge(enrollment.id, token);
-  return {
-    email: email || user.email || '',
-    passwordPayload: payload,
-    factorId: enrollment.id,
-    challengeId,
-    mode: 'enroll',
-    qrCode: totpQrSource(enrollment.totp?.qr_code),
-    secret: enrollment.totp?.secret || '',
-  };
-}
-
 async function beginPasswordSignIn(identifier, password) {
   const email = normalizeIdentifier(identifier);
   const payload = await authRequest('/auth/v1/token?grant_type=password', {
@@ -604,7 +463,6 @@ async function syncManagerWhatsApp() {
 async function signOut() {
   const token = session?.access_token;
   persistSession(null);
-  pendingAuth = null;
   pendingSignupWhatsApp = '';
   remoteCache = { bands: [], daily_logs: [], sales: [], charges: [] };
   remoteSettings = {};
@@ -800,9 +658,6 @@ async function getSnapshot() {
     logs: [...remoteCache.daily_logs],
     sales: [...remoteCache.sales],
     charges: [...remoteCache.charges],
-    items: [],
-    movements: [],
-    clients: [],
   };
 }
 
@@ -886,10 +741,6 @@ function activeBirds(band, snapshot) {
   const culls = sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.culls);
   const sold = sum(snapshot.sales.filter((sale) => sale.batch_id === band.id), (sale) => sale.heads);
   return Math.max(0, Number(band.initial_count) - mortality - culls - sold);
-}
-
-function bandFeedCost(band, snapshot) {
-  return sum(snapshot.logs.filter((log) => log.batch_id === band.id), (log) => log.feed_cost);
 }
 
 function bandCost(band, snapshot) {
@@ -2822,77 +2673,6 @@ function friendlyAuthError(error) {
   return message || 'Connexion impossible pour le moment.';
 }
 
-function friendlyTotpError(error) {
-  const message = String(error?.message || error || '');
-  if (/rate limit|too many/i.test(message)) return 'Trop de tentatives. Patientez une minute puis réessayez.';
-  if (/challenge.*(expired|not found)|invalid.*challenge/i.test(message)) return 'La vérification a expiré. Saisissez un nouveau code.';
-  if (/invalid|incorrect|mismatch|totp/i.test(message)) return 'Code incorrect. Vérifiez l’heure de votre téléphone puis réessayez.';
-  if (/failed to fetch|networkerror/i.test(message)) return 'Connexion au serveur impossible. Vérifiez votre réseau.';
-  return message || 'Vérification impossible pour le moment.';
-}
-
-function setTotpError(message) {
-  const node = $('#auth-totp-error');
-  if (!node) return;
-  node.textContent = message || '';
-  node.hidden = !message;
-}
-
-function setAuthStep(step) {
-  const showTotp = step === 'totp';
-  $$('[data-auth-step="login"]').forEach((node) => { node.hidden = showTotp; });
-  const totpForm = $('#auth-totp-form');
-  if (totpForm) totpForm.hidden = !showTotp;
-  if (showTotp) {
-    setTotpError('');
-    window.setTimeout(() => $('#auth-totp-code')?.focus(), 80);
-  } else {
-    const code = $('#auth-totp-code');
-    if (code) code.value = '';
-    setTotpError('');
-    window.setTimeout(() => $('#auth-identifier')?.focus(), 80);
-  }
-}
-
-function totpBusy(busy) {
-  const button = $('#auth-totp-submit');
-  const spinner = $('#auth-totp-spinner');
-  const label = $('#auth-totp-submit-label');
-  if (!button) return;
-  button.disabled = busy;
-  if (spinner) spinner.hidden = !busy;
-  if (label) {
-    if (busy) label.textContent = 'Vérification…';
-    else label.textContent = pendingAuth?.mode === 'enroll' ? 'Activer et se connecter' : 'Vérifier et se connecter';
-  }
-}
-
-function showTotpStep(challenge) {
-  const enroll = $('#auth-totp-enroll');
-  const title = $('#auth-totp-title');
-  const text = $('#auth-totp-text');
-  const qr = $('#auth-totp-qr');
-  const secret = $('#auth-totp-secret');
-  const secretLine = secret?.closest('.auth-totp-secret');
-  const isEnroll = challenge.mode === 'enroll';
-  if (enroll) enroll.hidden = !isEnroll;
-  if (title) title.textContent = isEnroll ? 'Configurer la double authentification' : 'Double authentification';
-  if (text) {
-    text.textContent = isEnroll
-      ? 'Scannez le QR code avec Google Authenticator, Authy ou Microsoft Authenticator, puis saisissez le code à 6 chiffres.'
-      : 'Saisissez le code à 6 chiffres affiché par votre application d’authentification.';
-  }
-  if (qr) {
-    if (isEnroll && challenge.qrCode) qr.src = challenge.qrCode;
-    else qr.removeAttribute('src');
-  }
-  if (secret) secret.textContent = isEnroll ? (challenge.secret || '') : '';
-  if (secretLine) secretLine.hidden = !isEnroll || !challenge.secret;
-  const submitLabel = $('#auth-totp-submit-label');
-  if (submitLabel) submitLabel.textContent = isEnroll ? 'Activer et se connecter' : 'Vérifier et se connecter';
-  setAuthStep('totp');
-}
-
 function setAuthMode(mode) {
   authMode = mode === 'signup' ? 'signup' : 'signin';
   $$('.auth-tab').forEach((tab) => {
@@ -2916,17 +2696,13 @@ function showAuthScreen() {
   document.body.classList.remove('is-authenticated');
   const screen = $('#auth-screen');
   if (screen) screen.hidden = false;
-  pendingAuth = null;
   pendingSignupWhatsApp = '';
   recoveryToken = '';
   const recovery = $('#auth-recovery');
   if (recovery) recovery.hidden = true;
   const loginForm = $('#auth-form');
   if (loginForm) loginForm.hidden = false;
-  const totpForm = $('#auth-totp-form');
-  if (totpForm) totpForm.hidden = true;
   setAuthMode('signin');
-  setAuthStep('login');
   window.setTimeout(() => $('#auth-identifier')?.focus(), 420);
 }
 
@@ -3278,7 +3054,6 @@ function bindAuthUI() {
       const payload = authMode === 'signup'
         ? await signUpWithIdentifier(identifier, password, normalizedWhatsApp)
         : await beginPasswordSignIn(identifier, password);
-      pendingAuth = null;
       pendingSignupWhatsApp = '';
       storeSession(payload);
       if (authMode === 'signup') {
@@ -3603,8 +3378,6 @@ async function main() {
     if (screen) screen.hidden = false;
     const loginForm = $('#auth-form');
     if (loginForm) loginForm.hidden = true;
-    const totpForm = $('#auth-totp-form');
-    if (totpForm) totpForm.hidden = true;
     const recovery = $('#auth-recovery');
     if (recovery) recovery.hidden = false;
   } else {
