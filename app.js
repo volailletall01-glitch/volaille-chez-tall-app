@@ -1645,25 +1645,47 @@ function generateReceipt(sale, band, options = {}) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.rel = 'noopener';
   document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+  // Sur mobile, le téléchargement programmatique peut être bloqué :
+  // on tente aussi d'ouvrir le PDF dans un nouvel onglet.
+  try { a.click(); } catch {}
+  window.setTimeout(() => {
+    try { window.open(url, '_blank'); } catch {}
+  }, 300);
+  window.setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 4000);
 }
 
 async function shareReceipt(sale, band, options = {}) {
   const { blob, filename } = receiptBlobAndName(sale, band, options);
   const file = new File([blob], filename, { type: 'application/pdf' });
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+  const url = URL.createObjectURL(blob);
+  // 1) Partage natif (mobile) si les fichiers PDF sont supportés.
+  if (navigator.share) {
     try {
-      await navigator.share({ files: [file], title: options.shareTitle || 'Reçu Volaille chez TALL', text: options.shareText || 'Voici votre reçu.' });
-      toast('Reçu envoyé.');
-      return;
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: options.shareTitle || 'Reçu Volaille chez TALL', text: options.shareText || 'Voici votre reçu.' });
+        URL.revokeObjectURL(url);
+        toast('Reçu envoyé.');
+        return;
+      }
     } catch (error) {
-      if (error && error.name === 'AbortError') return;
+      if (error && error.name === 'AbortError') { URL.revokeObjectURL(url); return; }
     }
   }
+  // 2) Sinon, ouvrir le PDF dans le navigateur pour partage manuel.
+  try {
+    const opened = window.open(url, '_blank');
+    if (opened) {
+      toast('Reçu ouvert. Utilisez le partage de votre navigateur pour l’envoyer.');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+  } catch {}
+  // 3) Dernier recours : téléchargement.
+  URL.revokeObjectURL(url);
   generateReceipt(sale, band, options);
-  toast('Partage non disponible : le reçu a été téléchargé.');
+  toast('Téléchargement du reçu lancé.');
 }
 
 function downloadReceipt(saleId, button) {
