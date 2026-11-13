@@ -220,6 +220,8 @@ async function localGetSnapshot() {
    Authentification Supabase + synchronisation cloud
    --------------------------------------------------------------------------- */
 const AUTH_STORAGE_KEY = 'volaille-chez-tall-session-v1';
+const IDLE_STORAGE_KEY = 'volaille-chez-tall-last-activity-v1';
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const PHONE_DOMAIN = 'phone.volaille-cheztall.app';
 const REMOTE_SCHEMA = {
   bands: ['id', 'organization_id', 'name', 'strain', 'arrival_date', 'initial_count', 'supplier', 'target_weight_kg', 'target_age_days', 'chick_unit_cost', 'transport_cost', 'chick_total_cost', 'status', 'archived_at', 'created_at', 'updated_at'],
@@ -256,6 +258,8 @@ function persistSession(value) {
   } catch (error) {
     console.error('Session non persistée', error);
   }
+  if (value) touchActivity();
+  else clearIdleTracking();
 }
 
 function sessionIsFresh() {
@@ -302,8 +306,69 @@ async function refreshSession() {
   return session;
 }
 
+let idleTimer = null;
+let idleActivityPending = false;
+
+function clearIdleTracking() {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  try { localStorage.removeItem(IDLE_STORAGE_KEY); } catch {}
+}
+
+function touchActivity() {
+  if (!session) return;
+  const now = Date.now();
+  try { localStorage.setItem(IDLE_STORAGE_KEY, String(now)); } catch {}
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(checkIdleTimeout, IDLE_TIMEOUT_MS);
+}
+
+function checkIdleTimeout() {
+  if (!session) return;
+  const last = Number(localStorage.getItem(IDLE_STORAGE_KEY) || 0);
+  if (last && Date.now() - last >= IDLE_TIMEOUT_MS) {
+    handleIdleLogout();
+  } else {
+    const remaining = IDLE_TIMEOUT_MS - (Date.now() - (last || Date.now()));
+    idleTimer = window.setTimeout(checkIdleTimeout, Math.max(1000, remaining));
+  }
+}
+
+async function handleIdleLogout() {
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  clearIdleTracking();
+  toast('Session expirée après 30 minutes d’inactivité. Reconnectez-vous.', true);
+  await signOut();
+  showAuthScreen();
+  setAuthError('Session expirée après 30 minutes d’inactivité.');
+}
+
+function bindIdleActivity() {
+  const handler = () => {
+    if (!session) return;
+    if (idleActivityPending) return;
+    idleActivityPending = true;
+    window.setTimeout(() => { idleActivityPending = false; }, 1000);
+    touchActivity();
+  };
+  ['mousemove', 'keydown', 'click', 'touchstart', 'scroll', 'wheel'].forEach((eventName) => {
+    window.addEventListener(eventName, handler, { passive: true });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const last = Number(localStorage.getItem(IDLE_STORAGE_KEY) || 0);
+      if (session && last && Date.now() - last >= IDLE_TIMEOUT_MS) handleIdleLogout();
+      else touchActivity();
+    }
+  });
+}
+
 async function ensureSession() {
   if (!session) session = readStoredSession();
+  const lastActivity = Number(localStorage.getItem(IDLE_STORAGE_KEY) || 0);
+  if (lastActivity && Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+    persistSession(null);
+    return null;
+  }
   if (!session) return null;
   if (sessionIsFresh()) return session;
   try {
@@ -3291,6 +3356,8 @@ async function startApp() {
   if (!location.hash) history.replaceState({ page: initialPage }, '', `#${initialPage}`);
   await setPage(initialPage);
   refreshOrderBadge();
+  bindIdleActivity();
+  touchActivity();
   if (supabaseReady()) {
     syncManagerWhatsApp().catch((error) => console.error(error));
     getSnapshot()
